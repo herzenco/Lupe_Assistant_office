@@ -4,7 +4,7 @@ import { useCallback } from 'react'
 import { usePolling } from '@/hooks/usePolling'
 import { PageHeader } from '@/components/PageHeader'
 import { clsx } from 'clsx'
-import { DollarSign, TrendingUp, AlertTriangle } from 'lucide-react'
+import { DollarSign, TrendingUp, AlertTriangle, Zap, ArrowDown, ArrowUp } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 interface CostData {
@@ -118,6 +118,83 @@ export default function CostsPage() {
               </p>
             </div>
           </div>
+
+          {/* Token Usage */}
+          {modelData.length > 0 && (() => {
+            const totalIn = modelData.reduce((s, m) => s + m.tokens_in, 0)
+            const totalOut = modelData.reduce((s, m) => s + m.tokens_out, 0)
+            const totalTokens = totalIn + totalOut
+            const fmtTokens = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n)
+
+            return (
+              <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 mb-6">
+                <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Token Usage</h3>
+
+                <div className="grid grid-cols-3 gap-4 mb-5">
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <Zap size={14} className="text-zinc-500" />
+                      <span className="text-xs text-zinc-500">Total</span>
+                    </div>
+                    <p className="text-2xl font-bold text-white">{fmtTokens(totalTokens)}</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <ArrowDown size={14} className="text-blue-400" />
+                      <span className="text-xs text-zinc-500">Input</span>
+                    </div>
+                    <p className="text-2xl font-bold text-blue-400">{fmtTokens(totalIn)}</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <ArrowUp size={14} className="text-purple-400" />
+                      <span className="text-xs text-zinc-500">Output</span>
+                    </div>
+                    <p className="text-2xl font-bold text-purple-400">{fmtTokens(totalOut)}</p>
+                  </div>
+                </div>
+
+                {/* Input/Output ratio bar */}
+                <div className="mb-5">
+                  <div className="h-3 bg-zinc-800 rounded-full overflow-hidden flex">
+                    <div className="bg-blue-500 h-full" style={{ width: `${totalTokens > 0 ? (totalIn / totalTokens) * 100 : 50}%` }} />
+                    <div className="bg-purple-500 h-full" style={{ width: `${totalTokens > 0 ? (totalOut / totalTokens) * 100 : 50}%` }} />
+                  </div>
+                  <div className="flex justify-between mt-1.5 text-xs text-zinc-500">
+                    <span>Input {totalTokens > 0 ? Math.round((totalIn / totalTokens) * 100) : 0}%</span>
+                    <span>Output {totalTokens > 0 ? Math.round((totalOut / totalTokens) * 100) : 0}%</span>
+                  </div>
+                </div>
+
+                {/* Per-model token bars */}
+                <div className="space-y-3">
+                  {modelData.map(m => {
+                    const mTotal = m.tokens_in + m.tokens_out
+                    const maxTokens = Math.max(...modelData.map(x => x.tokens_in + x.tokens_out))
+                    return (
+                      <div key={m.model}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ background: MODEL_COLORS[m.model] || '#6b7280' }} />
+                            <span className="text-xs font-medium text-zinc-300">{m.name}</span>
+                          </div>
+                          <span className="text-xs text-zinc-400">{fmtTokens(mTotal)}</span>
+                        </div>
+                        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden flex">
+                          <div className="bg-blue-500/80 h-full" style={{ width: `${maxTokens > 0 ? (m.tokens_in / maxTokens) * 100 : 0}%` }} />
+                          <div className="bg-purple-500/80 h-full" style={{ width: `${maxTokens > 0 ? (m.tokens_out / maxTokens) * 100 : 0}%` }} />
+                        </div>
+                        <div className="flex gap-3 mt-1 text-xs text-zinc-600">
+                          <span>{fmtTokens(m.tokens_in)} in</span>
+                          <span>{fmtTokens(m.tokens_out)} out</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Daily Spend Chart */}
           {dailyData.length > 0 && (
