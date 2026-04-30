@@ -3,10 +3,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { clsx } from 'clsx'
-import { Activity, DollarSign, LayoutList, Zap, Heart } from 'lucide-react'
+import { LayoutDashboard, DollarSign, LayoutList, Zap, Heart } from 'lucide-react'
 
 const mobileItems = [
-  { href: '/', label: 'Activity', icon: Activity },
+  { href: '/', label: 'Home', icon: LayoutDashboard },
   { href: '/costs', label: 'Costs', icon: DollarSign },
   { href: '/tasks', label: 'Tasks', icon: LayoutList },
   { href: '/actions', label: 'Actions', icon: Zap },

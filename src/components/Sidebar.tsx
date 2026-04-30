@@ -11,11 +11,13 @@ import {
   MessageSquare,
   Heart,
   Zap,
+  LayoutDashboard,
   LogOut,
 } from 'lucide-react'
 
 const navItems = [
-  { href: '/', label: 'Activity', icon: Activity },
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/activity', label: 'Activity', icon: Activity },
   { href: '/costs', label: 'Costs', icon: DollarSign },
   { href: '/tasks', label: 'Tasks', icon: LayoutList },
   { href: '/actions', label: 'Actions', icon: Zap },
