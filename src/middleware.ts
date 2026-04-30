@@ -30,13 +30,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Dashboard pages: require JWT cookie
-  const jwt = request.cookies.get('session')?.value
-  if (!jwt || !(await verifyToken(jwt))) {
-    const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
-  }
-
+  // Dashboard pages: open access (no login required)
   return NextResponse.next()
 }
 
