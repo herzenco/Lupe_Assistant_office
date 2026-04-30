@@ -47,6 +47,8 @@ export default function CostsPage() {
     ? Object.entries(data.by_model).map(([model, info]) => ({
         name: model.replace('claude-', '').replace(/-/g, ' '),
         value: Math.round(info.cost * 100) / 100,
+        tokens_in: info.tokens_in,
+        tokens_out: info.tokens_out,
         model,
       }))
     : []
@@ -161,6 +163,9 @@ export default function CostsPage() {
                         <div className="w-3 h-3 rounded-full" style={{ background: MODEL_COLORS[m.model] || '#6b7280' }} />
                         <span className="text-sm text-zinc-300">{m.name}</span>
                       </div>
+                      <span className="text-xs text-zinc-500">
+                        {(m.tokens_in / 1000).toFixed(1)}k in / {(m.tokens_out / 1000).toFixed(1)}k out
+                      </span>
                       <span className="text-sm font-semibold text-white">${m.value.toFixed(2)}</span>
                     </div>
                   ))}
