@@ -8,7 +8,7 @@ import { TASK_STATUS_LABELS, PRIORITY_COLORS, PROJECT_COLORS, ACTION_TYPE_LABELS
 import type { ProjectTag, ActionType, TaskPriority } from '@/lib/types'
 import {
   Activity, Cpu, Zap, DollarSign, LayoutList, Clock,
-  Heart, AlertTriangle, TrendingUp, CheckCircle2
+  Heart, AlertTriangle, TrendingUp, CheckCircle2, Briefcase
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import Link from 'next/link'
@@ -74,11 +74,17 @@ export default function Dashboard() {
     return res.ok ? (res.json() as Promise<ActionsData>) : null
   }, [])
 
+  const fetchAllActions = useCallback(async () => {
+    const res = await fetch('/api/actions?limit=500')
+    return res.ok ? (res.json() as Promise<ActionsData>) : null
+  }, [])
+
   const { data: heartbeats } = usePolling(fetchHeartbeats, 30_000)
   const { data: costs } = usePolling(fetchCosts, 60_000)
   const { data: tasks } = usePolling(fetchTasks, 60_000)
   const { data: health } = usePolling(fetchHealth, 30_000)
   const { data: actionsData } = usePolling(fetchActions, 30_000)
+  const { data: allActionsData } = usePolling(fetchAllActions, 120_000)
 
   const latest = heartbeats?.[0]
   const statusConfig = latest ? STATUS_CONFIG[latest.status] : STATUS_CONFIG.idle
@@ -301,6 +307,72 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Projects Breakdown */}
+      {(() => {
+        const allActions = allActionsData?.actions || []
+        const allTasks = tasks || []
+        const projectStats: Record<string, { actions: number; tasks: number; active: number; completed: number }> = {}
+
+        // Count actions per project
+        allActions.forEach(a => {
+          const tag = a.project_tag || 'Untagged'
+          if (!projectStats[tag]) projectStats[tag] = { actions: 0, tasks: 0, active: 0, completed: 0 }
+          projectStats[tag].actions++
+        })
+
+        // Count tasks per project
+        allTasks.forEach(t => {
+          const tag = t.project_tag || 'Untagged'
+          if (!projectStats[tag]) projectStats[tag] = { actions: 0, tasks: 0, active: 0, completed: 0 }
+          projectStats[tag].tasks++
+          if (t.status === 'in_progress') projectStats[tag].active++
+          if (t.status === 'complete') projectStats[tag].completed++
+        })
+
+        const totalActions = allActions.length
+        const entries = Object.entries(projectStats)
+          .filter(([name]) => name !== 'Untagged' || projectStats['Untagged']?.actions > 0)
+          .sort((a, b) => b[1].actions - a[1].actions)
+
+        if (entries.length === 0) return null
+
+        return (
+          <div className="mt-6 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                <Briefcase size={14} />
+                Projects
+              </h3>
+              <span className="text-xs text-zinc-500">{entries.length} projects</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {entries.map(([name, stats]) => {
+                const pct = totalActions > 0 ? Math.round((stats.actions / totalActions) * 100) : 0
+                const color = PROJECT_COLORS[name as ProjectTag] || '#6b7280'
+                return (
+                  <div key={name} className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 hover:border-zinc-700 transition-colors">
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
+                      <span className="text-sm font-semibold text-white">{name}</span>
+                      <span className="text-xs font-bold ml-auto" style={{ color }}>{pct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-3">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-zinc-500">
+                      <span>{stats.actions} actions</span>
+                      <span>{stats.tasks} tasks</span>
+                      {stats.active > 0 && <span className="text-indigo-400">{stats.active} active</span>}
+                      {stats.completed > 0 && <span className="text-green-400">{stats.completed} done</span>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Recent Activity (last 5 heartbeats) */}
       <div className="mt-6">
