@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { usePolling } from '@/hooks/usePolling'
 import { formatDistanceToNow, format } from 'date-fns'
 import type { Heartbeat, Task, Action } from '@/lib/types'
@@ -8,7 +8,8 @@ import { TASK_STATUS_LABELS, PRIORITY_COLORS, PROJECT_COLORS, ACTION_TYPE_LABELS
 import type { ProjectTag, ActionType, TaskPriority } from '@/lib/types'
 import {
   Activity, Cpu, Zap, DollarSign, LayoutList, Clock,
-  Heart, AlertTriangle, TrendingUp, CheckCircle2, Briefcase
+  Heart, AlertTriangle, TrendingUp, CheckCircle2, Briefcase,
+  Timer, Square
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import Link from 'next/link'
@@ -40,6 +41,29 @@ interface HealthData {
 interface ActionsData {
   actions: Action[]
   total: number
+}
+
+interface TimerCurrent {
+  project: string | null
+  startedAt: string | null
+  stoppedAt: string | null
+  duration: number | null
+  elapsed: number
+  running: boolean
+}
+
+interface TimerHistoryEntry {
+  project: string
+  startedAt: string
+  stoppedAt: string
+  duration: number
+}
+
+function formatDuration(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600)
+  const m = Math.floor((totalSeconds % 3600) / 60)
+  const s = totalSeconds % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
 const STATUS_CONFIG = {
@@ -79,12 +103,40 @@ export default function Dashboard() {
     return res.ok ? (res.json() as Promise<ActionsData>) : null
   }, [])
 
+  const fetchTimerCurrent = useCallback(async () => {
+    const res = await fetch('/api/timer/current')
+    return res.ok ? (res.json() as Promise<TimerCurrent>) : null
+  }, [])
+
+  const fetchTimerHistory = useCallback(async () => {
+    const res = await fetch('/api/timer/history')
+    return res.ok ? (res.json() as Promise<TimerHistoryEntry[]>) : []
+  }, [])
+
   const { data: heartbeats } = usePolling(fetchHeartbeats, 30_000)
   const { data: costs } = usePolling(fetchCosts, 60_000)
   const { data: tasks } = usePolling(fetchTasks, 60_000)
   const { data: health } = usePolling(fetchHealth, 30_000)
   const { data: actionsData } = usePolling(fetchActions, 30_000)
   const { data: allActionsData } = usePolling(fetchAllActions, 120_000)
+  const { data: timerCurrent } = usePolling(fetchTimerCurrent, 10_000)
+  const { data: timerHistory } = usePolling(fetchTimerHistory, 10_000)
+
+  // Live ticking clock
+  const [timerElapsed, setTimerElapsed] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current)
+    if (timerCurrent?.running && timerCurrent.startedAt) {
+      const calcElapsed = () => Math.round((Date.now() - new Date(timerCurrent.startedAt!).getTime()) / 1000)
+      setTimerElapsed(calcElapsed())
+      timerRef.current = setInterval(() => setTimerElapsed(calcElapsed()), 1000)
+    } else {
+      setTimerElapsed(timerCurrent?.elapsed || 0)
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [timerCurrent])
 
   const latest = heartbeats?.[0]
   const statusConfig = latest ? STATUS_CONFIG[latest.status] : STATUS_CONFIG.idle
@@ -174,6 +226,66 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Timer widget */}
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Timer size={14} className={timerCurrent?.running ? 'text-green-400' : 'text-zinc-500'} />
+            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Time Tracker</span>
+          </div>
+          {timerCurrent?.running && (
+            <span className="flex items-center gap-1.5 text-xs text-green-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              Running
+            </span>
+          )}
+        </div>
+
+        {timerCurrent?.project ? (
+          <div>
+            <p className="text-sm text-zinc-400 mb-1">{timerCurrent.running ? 'Working on' : 'Last session'}</p>
+            <p className="text-lg font-semibold text-white mb-2">{timerCurrent.project}</p>
+            <p className={clsx(
+              'text-3xl font-mono font-bold tabular-nums',
+              timerCurrent.running ? 'text-green-400' : 'text-zinc-400'
+            )}>
+              {formatDuration(timerElapsed)}
+            </p>
+            {!timerCurrent.running && timerCurrent.stoppedAt && (
+              <p className="text-xs text-zinc-500 mt-1">
+                Stopped {formatDistanceToNow(new Date(timerCurrent.stoppedAt), { addSuffix: true })}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-4">
+            <Square size={20} className="text-zinc-600 mx-auto mb-2" />
+            <p className="text-sm text-zinc-500">No timer activity</p>
+          </div>
+        )}
+
+        {/* Today's sessions */}
+        {timerHistory && timerHistory.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-zinc-800">
+            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Today&apos;s Sessions</p>
+            <div className="space-y-1.5">
+              {timerHistory.map((s, i) => (
+                <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-zinc-800/50">
+                  <span className="text-sm text-zinc-300 truncate mr-3">{s.project}</span>
+                  <span className="text-sm font-mono text-zinc-400 flex-shrink-0">{formatDuration(s.duration)}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
+                <span className="text-xs text-zinc-500">Total</span>
+                <span className="text-sm font-mono font-semibold text-zinc-300">
+                  {formatDuration(timerHistory.reduce((sum, s) => sum + s.duration, 0))}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

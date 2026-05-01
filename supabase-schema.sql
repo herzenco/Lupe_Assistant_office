@@ -116,6 +116,19 @@ CREATE INDEX idx_actions_timestamp ON actions(timestamp DESC);
 CREATE INDEX idx_actions_type ON actions(action_type);
 CREATE INDEX idx_actions_project ON actions(project_tag);
 
+-- Timer sessions: project time tracking
+CREATE TABLE timer_sessions (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  project text NOT NULL,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  stopped_at timestamptz,
+  duration_seconds integer
+);
+
+CREATE INDEX idx_timer_sessions_started ON timer_sessions(started_at DESC);
+
+ALTER TABLE timer_sessions ENABLE ROW LEVEL SECURITY;
+
 -- RLS enabled but no policies — service role key bypasses RLS
 ALTER TABLE heartbeats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cost_entries ENABLE ROW LEVEL SECURITY;

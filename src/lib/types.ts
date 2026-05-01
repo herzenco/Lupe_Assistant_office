@@ -82,3 +82,11 @@ export interface Action {
   timestamp: string
   created_at: string
 }
+
+export interface TimerSession {
+  id: string
+  project: string
+  started_at: string
+  stopped_at: string | null
+  duration_seconds: number | null
+}
