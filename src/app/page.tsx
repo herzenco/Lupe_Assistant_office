@@ -43,13 +43,11 @@ interface ActionsData {
   total: number
 }
 
-interface TimerCurrent {
-  project: string | null
-  startedAt: string | null
-  stoppedAt: string | null
-  duration: number | null
+interface TimerActive {
+  project: string
+  startedAt: string
   elapsed: number
-  running: boolean
+  running: true
 }
 
 interface TimerHistoryEntry {
@@ -57,6 +55,11 @@ interface TimerHistoryEntry {
   startedAt: string
   stoppedAt: string
   duration: number
+}
+
+interface TimerSummaryEntry {
+  project: string
+  totalToday: number
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -103,14 +106,14 @@ export default function Dashboard() {
     return res.ok ? (res.json() as Promise<ActionsData>) : null
   }, [])
 
-  const fetchTimerCurrent = useCallback(async () => {
+  const fetchTimerActive = useCallback(async () => {
     const res = await fetch('/api/timer/current')
-    return res.ok ? (res.json() as Promise<TimerCurrent>) : null
+    return res.ok ? (res.json() as Promise<TimerActive[]>) : []
   }, [])
 
-  const fetchTimerHistory = useCallback(async () => {
-    const res = await fetch('/api/timer/history')
-    return res.ok ? (res.json() as Promise<TimerHistoryEntry[]>) : []
+  const fetchTimerSummary = useCallback(async () => {
+    const res = await fetch('/api/timer/summary')
+    return res.ok ? (res.json() as Promise<TimerSummaryEntry[]>) : []
   }, [])
 
   const { data: heartbeats } = usePolling(fetchHeartbeats, 30_000)
@@ -119,24 +122,20 @@ export default function Dashboard() {
   const { data: health } = usePolling(fetchHealth, 30_000)
   const { data: actionsData } = usePolling(fetchActions, 30_000)
   const { data: allActionsData } = usePolling(fetchAllActions, 120_000)
-  const { data: timerCurrent } = usePolling(fetchTimerCurrent, 10_000)
-  const { data: timerHistory } = usePolling(fetchTimerHistory, 10_000)
+  const { data: timerActive } = usePolling(fetchTimerActive, 10_000)
+  const { data: timerSummary } = usePolling(fetchTimerSummary, 10_000)
 
-  // Live ticking clock
-  const [timerElapsed, setTimerElapsed] = useState(0)
+  // Live ticking clocks for all active timers
+  const [tick, setTick] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current)
-    if (timerCurrent?.running && timerCurrent.startedAt) {
-      const calcElapsed = () => Math.round((Date.now() - new Date(timerCurrent.startedAt!).getTime()) / 1000)
-      setTimerElapsed(calcElapsed())
-      timerRef.current = setInterval(() => setTimerElapsed(calcElapsed()), 1000)
-    } else {
-      setTimerElapsed(timerCurrent?.elapsed || 0)
+    if (timerActive && timerActive.length > 0) {
+      timerRef.current = setInterval(() => setTick(t => t + 1), 1000)
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [timerCurrent])
+  }, [timerActive])
 
   const latest = heartbeats?.[0]
   const statusConfig = latest ? STATUS_CONFIG[latest.status] : STATUS_CONFIG.idle
@@ -231,60 +230,100 @@ export default function Dashboard() {
       <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Timer size={14} className={timerCurrent?.running ? 'text-green-400' : 'text-zinc-500'} />
+            <Timer size={14} className={timerActive && timerActive.length > 0 ? 'text-green-400' : 'text-zinc-500'} />
             <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Time Tracker</span>
           </div>
-          {timerCurrent?.running && (
+          {timerActive && timerActive.length > 0 && (
             <span className="flex items-center gap-1.5 text-xs text-green-400">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              Running
+              {timerActive.length} active
             </span>
           )}
         </div>
 
-        {timerCurrent?.project ? (
-          <div>
-            <p className="text-sm text-zinc-400 mb-1">{timerCurrent.running ? 'Working on' : 'Last session'}</p>
-            <p className="text-lg font-semibold text-white mb-2">{timerCurrent.project}</p>
-            <p className={clsx(
-              'text-3xl font-mono font-bold tabular-nums',
-              timerCurrent.running ? 'text-green-400' : 'text-zinc-400'
-            )}>
-              {formatDuration(timerElapsed)}
-            </p>
-            {!timerCurrent.running && timerCurrent.stoppedAt && (
-              <p className="text-xs text-zinc-500 mt-1">
-                Stopped {formatDistanceToNow(new Date(timerCurrent.stoppedAt), { addSuffix: true })}
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="text-center py-4">
-            <Square size={20} className="text-zinc-600 mx-auto mb-2" />
-            <p className="text-sm text-zinc-500">No timer activity</p>
-          </div>
-        )}
+        {(() => {
+          const activeProjects = new Set((timerActive || []).map(t => t.project))
+          const summaryMap = new Map((timerSummary || []).map(s => [s.project, s.totalToday]))
+          // Merge: active timers first, then completed-only projects
+          const allProjects: { project: string; active: boolean; startedAt?: string; totalToday: number }[] = []
 
-        {/* Today's sessions */}
-        {timerHistory && timerHistory.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-zinc-800">
-            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Today&apos;s Sessions</p>
-            <div className="space-y-1.5">
-              {timerHistory.map((s, i) => (
-                <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-zinc-800/50">
-                  <span className="text-sm text-zinc-300 truncate mr-3">{s.project}</span>
-                  <span className="text-sm font-mono text-zinc-400 flex-shrink-0">{formatDuration(s.duration)}</span>
-                </div>
-              ))}
-              <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
-                <span className="text-xs text-zinc-500">Total</span>
-                <span className="text-sm font-mono font-semibold text-zinc-300">
-                  {formatDuration(timerHistory.reduce((sum, s) => sum + s.duration, 0))}
+          // Active timers
+          for (const t of timerActive || []) {
+            allProjects.push({
+              project: t.project,
+              active: true,
+              startedAt: t.startedAt,
+              totalToday: summaryMap.get(t.project) || 0,
+            })
+          }
+
+          // Completed-only projects from summary
+          for (const s of timerSummary || []) {
+            if (!activeProjects.has(s.project)) {
+              allProjects.push({
+                project: s.project,
+                active: false,
+                totalToday: s.totalToday,
+              })
+            }
+          }
+
+          if (allProjects.length === 0) {
+            return (
+              <div className="text-center py-4">
+                <Square size={20} className="text-zinc-600 mx-auto mb-2" />
+                <p className="text-sm text-zinc-500">No timer activity today</p>
+              </div>
+            )
+          }
+
+          const grandTotal = allProjects.reduce((sum, p) => {
+            if (p.active && p.startedAt) {
+              return sum + Math.round((Date.now() - new Date(p.startedAt).getTime()) / 1000)
+            }
+            return sum + p.totalToday
+          }, 0)
+
+          return (
+            <div className="space-y-1">
+              {allProjects.map((p, i) => {
+                const liveElapsed = p.active && p.startedAt
+                  ? Math.round((Date.now() - new Date(p.startedAt).getTime()) / 1000)
+                  : 0
+                // Use tick to force re-render
+                void tick
+
+                return (
+                  <div key={i} className={clsx(
+                    'flex items-center justify-between py-2.5 px-3 rounded-lg',
+                    p.active ? 'bg-green-500/5 border border-green-500/10' : 'hover:bg-zinc-800/50'
+                  )}>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {p.active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse flex-shrink-0" />}
+                      <span className={clsx('text-sm truncate', p.active ? 'text-white font-medium' : 'text-zinc-400')}>
+                        {p.project}
+                      </span>
+                    </div>
+                    <span className={clsx(
+                      'font-mono text-sm tabular-nums flex-shrink-0 ml-3',
+                      p.active ? 'text-green-400 font-semibold' : 'text-zinc-500'
+                    )}>
+                      {formatDuration(p.active ? liveElapsed : p.totalToday)}
+                    </span>
+                  </div>
+                )
+              })}
+
+              {/* Daily total */}
+              <div className="flex items-center justify-between pt-3 mt-2 border-t border-zinc-800">
+                <span className="text-xs text-zinc-500">Today&apos;s total</span>
+                <span className="text-sm font-mono font-semibold text-zinc-300 tabular-nums">
+                  {formatDuration(grandTotal)}
                 </span>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </div>
 
       {/* Stats row */}

@@ -11,26 +11,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'project is required' }, { status: 400 })
   }
 
-  // Stop any currently running timer
-  const { data: running } = await supabaseAdmin
+  // Check if this project already has a running timer
+  const { data: existing } = await supabaseAdmin
     .from('timer_sessions')
     .select('*')
+    .eq('project', project)
     .is('stopped_at', null)
-    .order('started_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
-  if (running) {
-    const duration = Math.round(
-      (Date.now() - new Date(running.started_at).getTime()) / 1000
+  if (existing) {
+    // No-op — return current state
+    const elapsed = Math.round(
+      (Date.now() - new Date(existing.started_at).getTime()) / 1000
     )
-    await supabaseAdmin
-      .from('timer_sessions')
-      .update({ stopped_at: new Date().toISOString(), duration_seconds: duration })
-      .eq('id', running.id)
+    return NextResponse.json({
+      project: existing.project,
+      startedAt: existing.started_at,
+      elapsed,
+      running: true,
+    })
   }
 
-  // Start new timer
+  // Start new timer for this project
   const { data, error } = await supabaseAdmin
     .from('timer_sessions')
     .insert({ project })

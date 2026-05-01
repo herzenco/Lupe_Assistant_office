@@ -1,16 +1,30 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST() {
-  const { data: running } = await supabaseAdmin
+export async function POST(request: NextRequest) {
+  let project: string | undefined
+
+  try {
+    const body = await request.json()
+    project = body.project
+  } catch {
+    // No body — will stop most recently started active timer
+  }
+
+  let query = supabaseAdmin
     .from('timer_sessions')
     .select('*')
     .is('stopped_at', null)
     .order('started_at', { ascending: false })
     .limit(1)
-    .maybeSingle()
+
+  if (project) {
+    query = query.eq('project', project)
+  }
+
+  const { data: running } = await query.maybeSingle()
 
   if (!running) {
     return NextResponse.json({ running: false, message: 'No active timer' })
