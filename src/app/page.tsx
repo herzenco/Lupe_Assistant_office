@@ -10,7 +10,7 @@ import type { ActionType, TaskPriority } from '@/lib/types'
 import {
   Activity, Cpu, Zap, DollarSign, LayoutList, Clock,
   Heart, AlertTriangle, TrendingUp, CheckCircle2, Briefcase,
-  Timer, Square, PieChart as PieChartIcon
+  Timer, Square, PieChart as PieChartIcon, FileText
 } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { clsx } from 'clsx'
@@ -140,6 +140,13 @@ export default function Dashboard() {
     return res.ok ? (res.json() as Promise<TimerStatsData>) : null
   }, [])
 
+  const fetchFileCounts = useCallback(async () => {
+    const res = await fetch('/api/files')
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.counts as Record<string, number>
+  }, [])
+
   const { data: heartbeats } = usePolling(fetchHeartbeats, 30_000)
   const { data: costs } = usePolling(fetchCosts, 60_000)
   const { data: tasks } = usePolling(fetchTasks, 60_000)
@@ -149,7 +156,8 @@ export default function Dashboard() {
   const { data: timerActive } = usePolling(fetchTimerActive, 10_000)
   const { data: timerSummary } = usePolling(fetchTimerSummary, 10_000)
   const { data: timerStats } = usePolling(fetchTimerStats, 60_000)
-  const { getProjectColor } = useProjects()
+  const { data: fileCounts } = usePolling(fetchFileCounts, 120_000)
+  const { projects, getProjectColor } = useProjects()
 
   // Live ticking clocks for all active timers
   const [tick, setTick] = useState(0)
@@ -594,28 +602,49 @@ export default function Dashboard() {
       {(() => {
         const allActions = allActionsData?.actions || []
         const allTasks = tasks || []
-        const projectStats: Record<string, { actions: number; tasks: number; active: number; completed: number }> = {}
+        const timeByProject = timerStats?.projects || []
+
+        // Build stats for all known projects from DB
+        const projectStats: Record<string, { actions: number; tasks: number; active: number; completed: number; files: number; timeWeek: number }> = {}
+
+        // Initialize from projects list (so all projects show)
+        for (const p of projects) {
+          projectStats[p.name] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
+        }
 
         // Count actions per project
         allActions.forEach(a => {
           const tag = a.project_tag || 'Untagged'
-          if (!projectStats[tag]) projectStats[tag] = { actions: 0, tasks: 0, active: 0, completed: 0 }
+          if (!projectStats[tag]) projectStats[tag] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
           projectStats[tag].actions++
         })
 
         // Count tasks per project
         allTasks.forEach(t => {
           const tag = t.project_tag || 'Untagged'
-          if (!projectStats[tag]) projectStats[tag] = { actions: 0, tasks: 0, active: 0, completed: 0 }
+          if (!projectStats[tag]) projectStats[tag] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
           projectStats[tag].tasks++
           if (t.status === 'in_progress') projectStats[tag].active++
           if (t.status === 'complete') projectStats[tag].completed++
         })
 
-        const totalActions = allActions.length
+        // Merge file counts
+        if (fileCounts) {
+          for (const [proj, count] of Object.entries(fileCounts)) {
+            if (!projectStats[proj]) projectStats[proj] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
+            projectStats[proj].files = count
+          }
+        }
+
+        // Merge time data
+        for (const tp of timeByProject) {
+          if (!projectStats[tp.project]) projectStats[tp.project] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
+          projectStats[tp.project].timeWeek = tp.week
+        }
+
         const entries = Object.entries(projectStats)
           .filter(([name]) => name !== 'Untagged' || projectStats['Untagged']?.actions > 0)
-          .sort((a, b) => b[1].actions - a[1].actions)
+          .sort((a, b) => b[1].timeWeek - a[1].timeWeek || b[1].actions - a[1].actions)
 
         if (entries.length === 0) return null
 
@@ -630,21 +659,29 @@ export default function Dashboard() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {entries.map(([name, stats]) => {
-                const pct = totalActions > 0 ? Math.round((stats.actions / totalActions) * 100) : 0
                 const color = getProjectColor(name)
                 return (
                   <div key={name} className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 hover:border-zinc-700 transition-colors">
                     <div className="flex items-center gap-2.5 mb-3">
                       <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
                       <span className="text-sm font-semibold text-white">{name}</span>
-                      <span className="text-xs font-bold ml-auto" style={{ color }}>{pct}%</span>
                     </div>
-                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-3">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-zinc-500">
-                      <span>{stats.actions} actions</span>
-                      <span>{stats.tasks} tasks</span>
+                    {stats.timeWeek > 0 && (
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Clock size={12} className="text-zinc-500" />
+                        <span className="text-xs font-mono text-zinc-300 tabular-nums">{formatDuration(stats.timeWeek)}</span>
+                        <span className="text-xs text-zinc-600">this week</span>
+                      </div>
+                    )}
+                    <div className="flex items-center flex-wrap gap-3 text-xs text-zinc-500">
+                      {stats.files > 0 && (
+                        <span className="flex items-center gap-1">
+                          <FileText size={11} />
+                          {stats.files} files
+                        </span>
+                      )}
+                      {stats.actions > 0 && <span>{stats.actions} actions</span>}
+                      {stats.tasks > 0 && <span>{stats.tasks} tasks</span>}
                       {stats.active > 0 && <span className="text-indigo-400">{stats.active} active</span>}
                       {stats.completed > 0 && <span className="text-green-400">{stats.completed} done</span>}
                     </div>
