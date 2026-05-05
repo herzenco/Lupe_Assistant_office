@@ -4,8 +4,9 @@ import { useCallback, useState, useEffect, useRef } from 'react'
 import { usePolling } from '@/hooks/usePolling'
 import { formatDistanceToNow, format } from 'date-fns'
 import type { Heartbeat, Task, Action } from '@/lib/types'
-import { TASK_STATUS_LABELS, PRIORITY_COLORS, PROJECT_COLORS, ACTION_TYPE_LABELS, ACTION_TYPE_COLORS } from '@/lib/constants'
-import type { ProjectTag, ActionType, TaskPriority } from '@/lib/types'
+import { TASK_STATUS_LABELS, PRIORITY_COLORS, ACTION_TYPE_LABELS, ACTION_TYPE_COLORS } from '@/lib/constants'
+import { useProjects } from '@/hooks/useProjects'
+import type { ActionType, TaskPriority } from '@/lib/types'
 import {
   Activity, Cpu, Zap, DollarSign, LayoutList, Clock,
   Heart, AlertTriangle, TrendingUp, CheckCircle2, Briefcase,
@@ -148,6 +149,7 @@ export default function Dashboard() {
   const { data: timerActive } = usePolling(fetchTimerActive, 10_000)
   const { data: timerSummary } = usePolling(fetchTimerSummary, 10_000)
   const { data: timerStats } = usePolling(fetchTimerStats, 60_000)
+  const { getProjectColor } = useProjects()
 
   // Live ticking clocks for all active timers
   const [tick, setTick] = useState(0)
@@ -374,11 +376,9 @@ export default function Dashboard() {
                     paddingAngle={2}
                     dataKey="value"
                   >
-                    {timerStats.projects.filter(p => p.week > 0).map((p, i) => {
-                      const knownColor = PROJECT_COLORS[p.project as ProjectTag]
-                      const fallbackColors = ['#6366f1', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#ef4444']
-                      return <Cell key={p.project} fill={knownColor || fallbackColors[i % fallbackColors.length]} />
-                    })}
+                    {timerStats.projects.filter(p => p.week > 0).map((p) => (
+                      <Cell key={p.project} fill={getProjectColor(p.project)} />
+                    ))}
                   </Pie>
                   <Tooltip
                     content={({ payload }) => {
@@ -397,10 +397,8 @@ export default function Dashboard() {
             </div>
             {/* Legend */}
             <div className="flex flex-wrap gap-3 mt-2">
-              {timerStats.projects.filter(p => p.week > 0).map((p, i) => {
-                const knownColor = PROJECT_COLORS[p.project as ProjectTag]
-                const fallbackColors = ['#6366f1', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#ef4444']
-                const color = knownColor || fallbackColors[i % fallbackColors.length]
+              {timerStats.projects.filter(p => p.week > 0).map((p) => {
+                const color = getProjectColor(p.project)
                 return (
                   <div key={p.project} className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
@@ -429,7 +427,7 @@ export default function Dashboard() {
               {timerStats.projects
                 .sort((a, b) => b.week - a.week)
                 .map(p => {
-                  const color = PROJECT_COLORS[p.project as ProjectTag] || '#6b7280'
+                  const color = getProjectColor(p.project)
                   return (
                     <div key={p.project} className="grid grid-cols-5 gap-2 py-2 text-sm items-center">
                       <div className="col-span-1 flex items-center gap-2 min-w-0">
@@ -542,8 +540,8 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 mt-1">
                         {task.project_tag && (
                           <span className="text-xs px-1.5 py-0.5 rounded" style={{
-                            background: `${PROJECT_COLORS[task.project_tag as ProjectTag]}20`,
-                            color: PROJECT_COLORS[task.project_tag as ProjectTag]
+                            background: `${getProjectColor(task.project_tag!)}20`,
+                            color: getProjectColor(task.project_tag!)
                           }}>
                             {task.project_tag}
                           </span>
@@ -633,7 +631,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {entries.map(([name, stats]) => {
                 const pct = totalActions > 0 ? Math.round((stats.actions / totalActions) * 100) : 0
-                const color = PROJECT_COLORS[name as ProjectTag] || '#6b7280'
+                const color = getProjectColor(name)
                 return (
                   <div key={name} className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 hover:border-zinc-700 transition-colors">
                     <div className="flex items-center gap-2.5 mb-3">
