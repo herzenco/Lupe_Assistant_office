@@ -612,38 +612,40 @@ export default function Dashboard() {
           projectStats[p.name] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
         }
 
-        // Count actions per project
+        // Only count data for registered projects
+        const registeredNames = new Set(projects.map(p => p.name))
+
+        // Count actions per project (only registered)
         allActions.forEach(a => {
-          const tag = a.project_tag || 'Untagged'
-          if (!projectStats[tag]) projectStats[tag] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
+          const tag = a.project_tag
+          if (!tag || !registeredNames.has(tag)) return
           projectStats[tag].actions++
         })
 
-        // Count tasks per project
+        // Count tasks per project (only registered)
         allTasks.forEach(t => {
-          const tag = t.project_tag || 'Untagged'
-          if (!projectStats[tag]) projectStats[tag] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
+          const tag = t.project_tag
+          if (!tag || !registeredNames.has(tag)) return
           projectStats[tag].tasks++
           if (t.status === 'in_progress') projectStats[tag].active++
           if (t.status === 'complete') projectStats[tag].completed++
         })
 
-        // Merge file counts
+        // Merge file counts (only registered)
         if (fileCounts) {
           for (const [proj, count] of Object.entries(fileCounts)) {
-            if (!projectStats[proj]) projectStats[proj] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
+            if (!registeredNames.has(proj)) continue
             projectStats[proj].files = count
           }
         }
 
-        // Merge time data
+        // Merge time data (only registered)
         for (const tp of timeByProject) {
-          if (!projectStats[tp.project]) projectStats[tp.project] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
+          if (!registeredNames.has(tp.project)) continue
           projectStats[tp.project].timeWeek = tp.week
         }
 
         const entries = Object.entries(projectStats)
-          .filter(([name]) => name !== 'Untagged' || projectStats['Untagged']?.actions > 0)
           .sort((a, b) => b[1].timeWeek - a[1].timeWeek || b[1].actions - a[1].actions)
 
         if (entries.length === 0) return null
