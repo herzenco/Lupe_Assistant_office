@@ -1,15 +1,11 @@
-import type { TaskStatus, TaskPriority, ProjectTag, ActionType } from './types'
+import type { TaskStatus, TaskPriority, ActionType } from './types'
 
 export const MONTHLY_BUDGET_USD = Number(process.env.MONTHLY_BUDGET_USD || 150)
 export const BUDGET_THRESHOLDS = [75, 90, 100] as const
 export const POLL_INTERVAL_MS = 30_000
 export const HEARTBEAT_STALE_MS = 120_000 // 2 min without heartbeat = stale
 
-export const PROJECT_TAGS: ProjectTag[] = [
-  'Xelerate', 'Xyren', 'ProntoBooks', 'Herzen Co.', 'Skydeo', 'Family Office', 'Xcaret'
-]
-
-export const PROJECT_COLORS: Record<ProjectTag, string> = {
+export const PROJECT_COLORS: Record<string, string> = {
   'Xelerate': '#6366f1',
   'Xyren': '#f59e0b',
   'ProntoBooks': '#10b981',
@@ -17,6 +13,7 @@ export const PROJECT_COLORS: Record<ProjectTag, string> = {
   'Skydeo': '#8b5cf6',
   'Family Office': '#ec4899',
   'Xcaret': '#14b8a6',
+  'Brain': '#ef4444',
 }
 
 export const TASK_STATUSES: TaskStatus[] = ['inbox', 'in_progress', 'blocked', 'review', 'complete']

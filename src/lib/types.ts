@@ -1,6 +1,6 @@
 export type TaskStatus = 'inbox' | 'in_progress' | 'blocked' | 'review' | 'complete'
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low'
-export type ProjectTag = 'Xelerate' | 'Xyren' | 'ProntoBooks' | 'Herzen Co.' | 'Skydeo' | 'Family Office' | 'Xcaret'
+export type ProjectTag = string
 export type LupeStatus = 'active' | 'idle' | 'error'
 export type SessionChannel = 'telegram' | 'tui' | 'api' | 'other'
 export type TaskComplexity = 'light' | 'medium' | 'heavy'

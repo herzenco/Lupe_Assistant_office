@@ -2,17 +2,21 @@
 
 import { useState } from 'react'
 import { useTasks } from '@/hooks/useTasks'
+import { useProjects } from '@/hooks/useProjects'
+import { NewProjectModal } from '@/components/NewProjectModal'
 import { PageHeader } from '@/components/PageHeader'
-import { TASK_STATUSES, TASK_STATUS_LABELS, PROJECT_TAGS, PROJECT_COLORS, PRIORITY_COLORS, TASK_PRIORITIES } from '@/lib/constants'
-import type { TaskStatus, Task, ProjectTag, TaskPriority } from '@/lib/types'
-import { Plus, X, Calendar, Clock, MessageSquare, Flag, Layers, Send } from 'lucide-react'
+import { TASK_STATUSES, TASK_STATUS_LABELS, PRIORITY_COLORS, TASK_PRIORITIES } from '@/lib/constants'
+import type { TaskStatus, Task, TaskPriority } from '@/lib/types'
+import { Plus, X, Calendar, Clock, MessageSquare, Flag, Layers, Send, FolderPlus } from 'lucide-react'
 import { clsx } from 'clsx'
 import { format, formatDistanceToNow } from 'date-fns'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 
 export default function TasksPage() {
   const { tasks, loading, createTask, updateTask, moveTask, deleteTask } = useTasks()
+  const { projects, getProjectColor, createProject } = useProjects()
   const [showAdd, setShowAdd] = useState(false)
+  const [showNewProject, setShowNewProject] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [filterProject, setFilterProject] = useState<string>('')
   const [filterPriority, setFilterPriority] = useState<string>('')
@@ -53,7 +57,7 @@ export default function TasksPage() {
       title: newTitle,
       description: newDesc,
       priority: newPriority,
-      project_tag: (newProject || null) as ProjectTag | null,
+      project_tag: newProject || null,
       due_date: newDueDate || null,
     })
     setNewTitle('')
@@ -110,13 +114,26 @@ export default function TasksPage() {
       <div className="flex flex-wrap gap-2 mb-6">
         <select value={filterProject} onChange={e => setFilterProject(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-zinc-300">
           <option value="">All Projects</option>
-          {PROJECT_TAGS.map(p => <option key={p} value={p}>{p}</option>)}
+          {projects.map(p => <option key={p.slug} value={p.name}>{p.name}</option>)}
         </select>
         <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-zinc-300">
           <option value="">All Priorities</option>
           {TASK_PRIORITIES.map(p => <option key={p} value={p} className="capitalize">{p}</option>)}
         </select>
+        <button
+          onClick={() => setShowNewProject(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-zinc-400 bg-zinc-800 border border-zinc-700 rounded-lg hover:text-zinc-200 hover:border-zinc-600 transition-colors"
+        >
+          <FolderPlus size={14} /> New Project
+        </button>
       </div>
+
+      {showNewProject && (
+        <NewProjectModal
+          onClose={() => setShowNewProject(false)}
+          onCreate={createProject}
+        />
+      )}
 
       {/* Add Task Modal */}
       {showAdd && (
@@ -143,7 +160,7 @@ export default function TasksPage() {
             <div className="flex gap-3 mb-3">
               <select value={newProject} onChange={e => setNewProject(e.target.value)} className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300">
                 <option value="">No Project</option>
-                {PROJECT_TAGS.map(p => <option key={p} value={p}>{p}</option>)}
+                {projects.map(p => <option key={p.slug} value={p.name}>{p.name}</option>)}
               </select>
               <select value={newPriority} onChange={e => setNewPriority(e.target.value as TaskPriority)} className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 capitalize">
                 {TASK_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -172,8 +189,8 @@ export default function TasksPage() {
                 <h3 className="text-lg font-semibold text-white">{selectedTask.title}</h3>
                 {selectedTask.project_tag && (
                   <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded" style={{
-                    background: `${PROJECT_COLORS[selectedTask.project_tag as ProjectTag]}20`,
-                    color: PROJECT_COLORS[selectedTask.project_tag as ProjectTag]
+                    background: `${getProjectColor(selectedTask.project_tag!)}20`,
+                    color: getProjectColor(selectedTask.project_tag!)
                   }}>
                     {selectedTask.project_tag}
                   </span>
@@ -344,7 +361,7 @@ export default function TasksPage() {
                                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                                   <span className="inline-block w-2 h-2 rounded-full" style={{ background: PRIORITY_COLORS[task.priority] }} />
                                   {task.project_tag && (
-                                    <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: `${PROJECT_COLORS[task.project_tag as ProjectTag]}20`, color: PROJECT_COLORS[task.project_tag as ProjectTag] }}>
+                                    <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: `${getProjectColor(task.project_tag!)}20`, color: getProjectColor(task.project_tag!) }}>
                                       {task.project_tag}
                                     </span>
                                   )}
@@ -387,6 +404,7 @@ export default function TasksPage() {
 }
 
 function TaskListView({ tasks, onOpen }: { tasks: Task[]; onOpen: (task: Task) => void }) {
+  const { getProjectColor } = useProjects()
   return (
     <div className="space-y-2">
       {tasks.length === 0 ? (
@@ -405,7 +423,7 @@ function TaskListView({ tasks, onOpen }: { tasks: Task[]; onOpen: (task: Task) =
                   <p className="text-sm font-medium text-zinc-200">{task.title}</p>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     {task.project_tag && (
-                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: `${PROJECT_COLORS[task.project_tag as ProjectTag]}20`, color: PROJECT_COLORS[task.project_tag as ProjectTag] }}>
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: `${getProjectColor(task.project_tag!)}20`, color: getProjectColor(task.project_tag!) }}>
                         {task.project_tag}
                       </span>
                     )}

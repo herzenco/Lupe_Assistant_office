@@ -116,6 +116,28 @@ CREATE INDEX idx_actions_timestamp ON actions(timestamp DESC);
 CREATE INDEX idx_actions_type ON actions(action_type);
 CREATE INDEX idx_actions_project ON actions(project_tag);
 
+-- Projects: dynamic project registry
+CREATE TABLE projects (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text NOT NULL,
+  slug text NOT NULL UNIQUE,
+  description text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+
+-- Seed initial projects
+INSERT INTO projects (name, slug) VALUES
+  ('Herzen Co.', 'herzen-co'),
+  ('Xelerate', 'xelerate'),
+  ('Xyren', 'xyren'),
+  ('Skydeo', 'skydeo'),
+  ('ProntoBooks', 'prontobooks'),
+  ('Xcaret', 'xcaret'),
+  ('Family Office', 'family-office'),
+  ('Brain', 'brain');
+
 -- Timer sessions: project time tracking
 CREATE TABLE timer_sessions (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,

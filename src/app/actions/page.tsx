@@ -2,10 +2,12 @@
 
 import { useState, useCallback } from 'react'
 import { usePolling } from '@/hooks/usePolling'
+import { useProjects } from '@/hooks/useProjects'
+import { NewProjectModal } from '@/components/NewProjectModal'
 import { PageHeader } from '@/components/PageHeader'
-import { ACTION_TYPE_LABELS, ACTION_TYPE_COLORS, PROJECT_TAGS, PROJECT_COLORS, ACTION_TYPES } from '@/lib/constants'
-import type { Action, ActionType, ProjectTag } from '@/lib/types'
-import { Search, Filter } from 'lucide-react'
+import { ACTION_TYPE_LABELS, ACTION_TYPE_COLORS, ACTION_TYPES } from '@/lib/constants'
+import type { Action, ActionType } from '@/lib/types'
+import { Search, Filter, FolderPlus } from 'lucide-react'
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 
@@ -18,6 +20,8 @@ interface ActionsData {
 }
 
 export default function ActionsPage() {
+  const { projects, getProjectColor, createProject } = useProjects()
+  const [showNewProject, setShowNewProject] = useState(false)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('')
@@ -62,9 +66,22 @@ export default function ActionsPage() {
         </select>
         <select value={filterProject} onChange={e => { setFilterProject(e.target.value); setPage(1) }} className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300">
           <option value="">All Projects</option>
-          {PROJECT_TAGS.map(p => <option key={p} value={p}>{p}</option>)}
+          {projects.map(p => <option key={p.slug} value={p.name}>{p.name}</option>)}
         </select>
+        <button
+          onClick={() => setShowNewProject(true)}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm text-zinc-400 bg-zinc-800 border border-zinc-700 rounded-lg hover:text-zinc-200 hover:border-zinc-600 transition-colors"
+        >
+          <FolderPlus size={14} /> New Project
+        </button>
       </div>
+
+      {showNewProject && (
+        <NewProjectModal
+          onClose={() => setShowNewProject(false)}
+          onCreate={createProject}
+        />
+      )}
 
       {loading ? (
         <div className="text-center text-zinc-500 py-12">Loading...</div>
@@ -104,8 +121,8 @@ export default function ActionsPage() {
                         <span
                           className="text-xs px-1.5 py-0.5 rounded flex-shrink-0"
                           style={{
-                            background: `${PROJECT_COLORS[action.project_tag as ProjectTag]}15`,
-                            color: PROJECT_COLORS[action.project_tag as ProjectTag],
+                            background: `${getProjectColor(action.project_tag)}15`,
+                            color: getProjectColor(action.project_tag),
                           }}
                         >
                           {action.project_tag}
