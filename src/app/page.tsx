@@ -9,8 +9,9 @@ import type { ProjectTag, ActionType, TaskPriority } from '@/lib/types'
 import {
   Activity, Cpu, Zap, DollarSign, LayoutList, Clock,
   Heart, AlertTriangle, TrendingUp, CheckCircle2, Briefcase,
-  Timer, Square
+  Timer, Square, PieChart as PieChartIcon
 } from 'lucide-react'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { clsx } from 'clsx'
 import Link from 'next/link'
 
@@ -60,6 +61,19 @@ interface TimerHistoryEntry {
 interface TimerSummaryEntry {
   project: string
   totalToday: number
+}
+
+interface TimerStatsProject {
+  project: string
+  today: number
+  week: number
+  month: number
+  year: number
+}
+
+interface TimerStatsData {
+  projects: TimerStatsProject[]
+  totals: { today: number; week: number; month: number; year: number }
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -116,6 +130,11 @@ export default function Dashboard() {
     return res.ok ? (res.json() as Promise<TimerSummaryEntry[]>) : []
   }, [])
 
+  const fetchTimerStats = useCallback(async () => {
+    const res = await fetch('/api/timer/stats')
+    return res.ok ? (res.json() as Promise<TimerStatsData>) : null
+  }, [])
+
   const { data: heartbeats } = usePolling(fetchHeartbeats, 30_000)
   const { data: costs } = usePolling(fetchCosts, 60_000)
   const { data: tasks } = usePolling(fetchTasks, 60_000)
@@ -124,6 +143,7 @@ export default function Dashboard() {
   const { data: allActionsData } = usePolling(fetchAllActions, 120_000)
   const { data: timerActive } = usePolling(fetchTimerActive, 10_000)
   const { data: timerSummary } = usePolling(fetchTimerSummary, 10_000)
+  const { data: timerStats } = usePolling(fetchTimerStats, 60_000)
 
   // Live ticking clocks for all active timers
   const [tick, setTick] = useState(0)
@@ -325,6 +345,112 @@ export default function Dashboard() {
           )
         })()}
       </div>
+
+      {/* Time Distribution Pie Chart + Project Time Stats */}
+      {timerStats && timerStats.projects.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Pie Chart */}
+          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <PieChartIcon size={14} className="text-zinc-500" />
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Time Distribution (This Week)</span>
+            </div>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={timerStats.projects.filter(p => p.week > 0).map(p => ({
+                      name: p.project,
+                      value: p.week,
+                    }))}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={75}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {timerStats.projects.filter(p => p.week > 0).map((p, i) => {
+                      const knownColor = PROJECT_COLORS[p.project as ProjectTag]
+                      const fallbackColors = ['#6366f1', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#ef4444']
+                      return <Cell key={p.project} fill={knownColor || fallbackColors[i % fallbackColors.length]} />
+                    })}
+                  </Pie>
+                  <Tooltip
+                    content={({ payload }) => {
+                      if (!payload?.length) return null
+                      const d = payload[0]
+                      return (
+                        <div className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs">
+                          <p className="text-white font-medium">{d.name}</p>
+                          <p className="text-zinc-400">{formatDuration(d.value as number)}</p>
+                        </div>
+                      )
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Legend */}
+            <div className="flex flex-wrap gap-3 mt-2">
+              {timerStats.projects.filter(p => p.week > 0).map((p, i) => {
+                const knownColor = PROJECT_COLORS[p.project as ProjectTag]
+                const fallbackColors = ['#6366f1', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#ef4444']
+                const color = knownColor || fallbackColors[i % fallbackColors.length]
+                return (
+                  <div key={p.project} className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                    <span className="text-xs text-zinc-400">{p.project}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Project Time Breakdown Table */}
+          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Clock size={14} className="text-zinc-500" />
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Time per Project</span>
+            </div>
+            <div className="space-y-1">
+              {/* Header */}
+              <div className="grid grid-cols-5 gap-2 text-xs text-zinc-500 pb-2 border-b border-zinc-800">
+                <span className="col-span-1">Project</span>
+                <span className="text-right">Today</span>
+                <span className="text-right">Week</span>
+                <span className="text-right">Month</span>
+                <span className="text-right">Year</span>
+              </div>
+              {timerStats.projects
+                .sort((a, b) => b.week - a.week)
+                .map(p => {
+                  const color = PROJECT_COLORS[p.project as ProjectTag] || '#6b7280'
+                  return (
+                    <div key={p.project} className="grid grid-cols-5 gap-2 py-2 text-sm items-center">
+                      <div className="col-span-1 flex items-center gap-2 min-w-0">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                        <span className="text-zinc-300 truncate text-xs">{p.project}</span>
+                      </div>
+                      <span className="text-right font-mono text-xs text-zinc-400 tabular-nums">{formatDuration(p.today)}</span>
+                      <span className="text-right font-mono text-xs text-zinc-400 tabular-nums">{formatDuration(p.week)}</span>
+                      <span className="text-right font-mono text-xs text-zinc-400 tabular-nums">{formatDuration(p.month)}</span>
+                      <span className="text-right font-mono text-xs text-zinc-400 tabular-nums">{formatDuration(p.year)}</span>
+                    </div>
+                  )
+                })}
+              {/* Totals row */}
+              <div className="grid grid-cols-5 gap-2 pt-2 border-t border-zinc-800 text-sm items-center">
+                <span className="col-span-1 text-xs font-semibold text-zinc-400">Total</span>
+                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(timerStats.totals.today)}</span>
+                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(timerStats.totals.week)}</span>
+                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(timerStats.totals.month)}</span>
+                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(timerStats.totals.year)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

@@ -24,10 +24,14 @@ export async function POST(request: NextRequest) {
     query = query.eq('project', project)
   }
 
-  const { data: running } = await query.maybeSingle()
+  const { data: running, error: queryError } = await query.maybeSingle()
+
+  if (queryError) {
+    return NextResponse.json({ error: queryError.message }, { status: 500 })
+  }
 
   if (!running) {
-    return NextResponse.json({ running: false, message: 'No active timer' })
+    return NextResponse.json({ running: false, elapsed: 0, message: 'No active timer' })
   }
 
   const duration = Math.round(
@@ -47,6 +51,7 @@ export async function POST(request: NextRequest) {
     project: running.project,
     startedAt: running.started_at,
     stoppedAt: new Date().toISOString(),
+    elapsed: duration,
     duration,
     running: false,
   })
