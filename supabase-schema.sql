@@ -116,6 +116,22 @@ CREATE INDEX idx_actions_timestamp ON actions(timestamp DESC);
 CREATE INDEX idx_actions_type ON actions(action_type);
 CREATE INDEX idx_actions_project ON actions(project_tag);
 
+-- CodexBar costs: AI spend from local JSONL logs
+CREATE TABLE codexbar_costs (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  reported_at timestamptz NOT NULL DEFAULT now(),
+  month text NOT NULL,
+  provider text NOT NULL,
+  cost_usd numeric NOT NULL,
+  tokens_total integer,
+  payload jsonb
+);
+
+CREATE INDEX idx_codexbar_costs_month ON codexbar_costs(month);
+CREATE INDEX idx_codexbar_costs_reported ON codexbar_costs(reported_at DESC);
+
+ALTER TABLE codexbar_costs ENABLE ROW LEVEL SECURITY;
+
 -- Projects: dynamic project registry
 CREATE TABLE projects (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,

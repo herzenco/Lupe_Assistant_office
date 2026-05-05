@@ -21,6 +21,10 @@ interface CostData {
   budget_pct: number
   projected_spend: number
   budget_remaining: number
+  source: 'codexbar' | 'sessions'
+  codexbar_spend: number
+  session_spend: number
+  by_provider?: Record<string, { cost: number; tokens_total: number; reported_at: string }>
   by_model: Record<string, { cost: number; tokens_in: number; tokens_out: number }>
 }
 
@@ -464,6 +468,9 @@ export default function Dashboard() {
             <div className={clsx('h-full rounded-full', barColor)} style={{ width: `${Math.min(budgetPct, 100)}%` }} />
           </div>
           <p className="text-xs text-zinc-500 mt-1">{budgetPct}% of ${costs?.budget || 150}</p>
+          <p className="text-xs mt-1" style={{ color: costs?.source === 'codexbar' ? '#10b981' : '#6b7280' }}>
+            {costs?.source === 'codexbar' ? 'CodexBar (Claude + Codex)' : 'Session spend'}
+          </p>
         </Link>
 
         <Link href="/tasks" className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 hover:border-zinc-700 transition-colors">
