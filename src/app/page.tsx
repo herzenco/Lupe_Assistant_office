@@ -88,6 +88,13 @@ function formatDuration(totalSeconds: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+function formatHoursMinutes(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600)
+  const m = Math.floor((totalSeconds % 3600) / 60)
+  if (h === 0) return `${m}m`
+  return `${h}h ${m}m`
+}
+
 const STATUS_CONFIG = {
   active: { color: 'bg-green-500', label: 'Active', ring: 'ring-green-500/30', text: 'text-green-400' },
   idle: { color: 'bg-zinc-500', label: 'Idle', ring: 'ring-zinc-500/30', text: 'text-zinc-400' },
@@ -605,11 +612,11 @@ export default function Dashboard() {
         const timeByProject = timerStats?.projects || []
 
         // Build stats for all known projects from DB
-        const projectStats: Record<string, { actions: number; tasks: number; active: number; completed: number; files: number; timeWeek: number }> = {}
+        const projectStats: Record<string, { actions: number; tasks: number; active: number; completed: number; files: number; timeMonth: number }> = {}
 
         // Initialize from projects list (so all projects show)
         for (const p of projects) {
-          projectStats[p.name] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeWeek: 0 }
+          projectStats[p.name] = { actions: 0, tasks: 0, active: 0, completed: 0, files: 0, timeMonth: 0 }
         }
 
         // Only count data for registered projects
@@ -631,22 +638,21 @@ export default function Dashboard() {
           if (t.status === 'complete') projectStats[tag].completed++
         })
 
-        // Merge file counts (only registered)
-        if (fileCounts) {
-          for (const [proj, count] of Object.entries(fileCounts)) {
-            if (!registeredNames.has(proj)) continue
-            projectStats[proj].files = count
+        // Merge file counts from project records
+        for (const p of projects) {
+          if (p.file_count != null) {
+            projectStats[p.name].files = p.file_count
           }
         }
 
         // Merge time data (only registered)
         for (const tp of timeByProject) {
           if (!registeredNames.has(tp.project)) continue
-          projectStats[tp.project].timeWeek = tp.week
+          projectStats[tp.project].timeMonth = tp.month
         }
 
         const entries = Object.entries(projectStats)
-          .sort((a, b) => b[1].timeWeek - a[1].timeWeek || b[1].actions - a[1].actions)
+          .sort((a, b) => b[1].timeMonth - a[1].timeMonth || b[1].actions - a[1].actions)
 
         if (entries.length === 0) return null
 
@@ -668,20 +674,16 @@ export default function Dashboard() {
                       <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
                       <span className="text-sm font-semibold text-white">{name}</span>
                     </div>
-                    {stats.timeWeek > 0 && (
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Clock size={12} className="text-zinc-500" />
-                        <span className="text-xs font-mono text-zinc-300 tabular-nums">{formatDuration(stats.timeWeek)}</span>
-                        <span className="text-xs text-zinc-600">this week</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Clock size={12} className="text-zinc-500" />
+                      <span className="text-xs font-mono text-zinc-300 tabular-nums">{stats.timeMonth > 0 ? formatHoursMinutes(stats.timeMonth) : '\u2014'}</span>
+                      <span className="text-xs text-zinc-600">this month</span>
+                    </div>
                     <div className="flex items-center flex-wrap gap-3 text-xs text-zinc-500">
-                      {stats.files > 0 && (
-                        <span className="flex items-center gap-1">
-                          <FileText size={11} />
-                          {stats.files} files
-                        </span>
-                      )}
+                      <span className="flex items-center gap-1">
+                        <FileText size={11} />
+                        {stats.files > 0 ? `${stats.files} files` : '\u2014'}
+                      </span>
                       {stats.actions > 0 && <span>{stats.actions} actions</span>}
                       {stats.tasks > 0 && <span>{stats.tasks} tasks</span>}
                       {stats.active > 0 && <span className="text-indigo-400">{stats.active} active</span>}

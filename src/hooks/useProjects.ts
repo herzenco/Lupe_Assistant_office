@@ -7,6 +7,8 @@ export interface Project {
   name: string
   slug: string
   description: string | null
+  file_count: number | null
+  file_count_updated_at: string | null
   created_at: string
 }
 
@@ -63,5 +65,31 @@ export function useProjects() {
     return `hsl(${hue}, 60%, 55%)`
   }
 
-  return { projects, loading, createProject, getProjectColor, refetch: fetchProjects }
+  const updateProject = async (slug: string, patch: { name?: string; description?: string; file_count?: number }) => {
+    const res = await fetch(`/api/projects/${slug}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.error)
+    }
+    const updated = await res.json()
+    setProjects(prev => prev.map(p => p.slug === slug ? updated : p))
+    return updated
+  }
+
+  const deleteProject = async (slug: string) => {
+    const res = await fetch(`/api/projects/${slug}`, {
+      method: 'DELETE',
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.error)
+    }
+    setProjects(prev => prev.filter(p => p.slug !== slug))
+  }
+
+  return { projects, loading, createProject, updateProject, deleteProject, getProjectColor, refetch: fetchProjects }
 }
