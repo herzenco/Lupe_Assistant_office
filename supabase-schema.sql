@@ -154,13 +154,14 @@ INSERT INTO projects (name, slug) VALUES
   ('Family Office', 'family-office'),
   ('Brain', 'brain');
 
--- Timer sessions: project time tracking
+-- Timer sessions: project time tracking (supports multiple parallel timers)
 CREATE TABLE timer_sessions (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   project text NOT NULL,
   started_at timestamptz NOT NULL DEFAULT now(),
   stopped_at timestamptz,
-  duration_seconds integer
+  duration_seconds integer,
+  user_id text
 );
 
 CREATE INDEX idx_timer_sessions_started ON timer_sessions(started_at DESC);

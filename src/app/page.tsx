@@ -10,7 +10,8 @@ import type { ActionType, TaskPriority } from '@/lib/types'
 import {
   Activity, Cpu, Zap, DollarSign, LayoutList, Clock,
   Heart, AlertTriangle, TrendingUp, CheckCircle2, Briefcase,
-  Timer, Square, PieChart as PieChartIcon, FileText
+  Timer, Square, PieChart as PieChartIcon, FileText, Play, StopCircle,
+  ChevronDown
 } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { clsx } from 'clsx'
@@ -166,6 +167,55 @@ export default function Dashboard() {
   const { data: fileCounts } = usePolling(fetchFileCounts, 120_000)
   const { projects, getProjectColor } = useProjects()
 
+  // Timer controls state
+  const [selectedProject, setSelectedProject] = useState('')
+  const [timerLoading, setTimerLoading] = useState<string | null>(null)
+  const [showProjectPicker, setShowProjectPicker] = useState(false)
+
+  const fetchTimerRefresh = useCallback(async () => {
+    // Trigger re-fetches after start/stop
+    const [active, summary] = await Promise.all([fetchTimerActive(), fetchTimerSummary()])
+    return { active, summary }
+  }, [fetchTimerActive, fetchTimerSummary])
+
+  const handleStartTimer = useCallback(async (project: string) => {
+    if (!project) return
+    setTimerLoading(project)
+    try {
+      const res = await fetch('/api/timer/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        console.error('Failed to start timer:', err.error)
+      }
+    } finally {
+      setTimerLoading(null)
+      // Force refresh polling data
+      await fetchTimerRefresh()
+    }
+  }, [fetchTimerRefresh])
+
+  const handleStopTimer = useCallback(async (project: string) => {
+    setTimerLoading(project)
+    try {
+      const res = await fetch('/api/timer/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        console.error('Failed to stop timer:', err.error)
+      }
+    } finally {
+      setTimerLoading(null)
+      await fetchTimerRefresh()
+    }
+  }, [fetchTimerRefresh])
+
   // Live ticking clocks for all active timers
   const [tick, setTick] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -274,21 +324,70 @@ export default function Dashboard() {
             <Timer size={14} className={timerActive && timerActive.length > 0 ? 'text-green-400' : 'text-zinc-500'} />
             <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Time Tracker</span>
           </div>
-          {timerActive && timerActive.length > 0 && (
-            <span className="flex items-center gap-1.5 text-xs text-green-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              {timerActive.length} active
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {timerActive && timerActive.length > 0 && (
+              <span className="flex items-center gap-1.5 text-xs text-green-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                {timerActive.length} active
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Start timer control */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="relative flex-1">
+            <button
+              onClick={() => setShowProjectPicker(!showProjectPicker)}
+              className="w-full flex items-center justify-between px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-300 hover:border-zinc-600 transition-colors"
+            >
+              <span className={selectedProject ? 'text-white' : 'text-zinc-500'}>
+                {selectedProject || 'Select project...'}
+              </span>
+              <ChevronDown size={14} className="text-zinc-500" />
+            </button>
+            {showProjectPicker && (
+              <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                {projects.map(p => {
+                  const isActive = (timerActive || []).some(t => t.project === p.name)
+                  return (
+                    <button
+                      key={p.slug}
+                      onClick={() => { setSelectedProject(p.name); setShowProjectPicker(false) }}
+                      className={clsx(
+                        'w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-zinc-700/50 transition-colors',
+                        selectedProject === p.name && 'bg-zinc-700/30'
+                      )}
+                    >
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: getProjectColor(p.name) }} />
+                      <span className="text-zinc-200">{p.name}</span>
+                      {isActive && <span className="ml-auto text-xs text-green-400">running</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => { if (selectedProject) handleStartTimer(selectedProject) }}
+            disabled={!selectedProject || timerLoading !== null}
+            className={clsx(
+              'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              selectedProject && !timerLoading
+                ? 'bg-green-600 hover:bg-green-500 text-white'
+                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+            )}
+          >
+            <Play size={13} />
+            Start
+          </button>
         </div>
 
         {(() => {
           const activeProjects = new Set((timerActive || []).map(t => t.project))
           const summaryMap = new Map((timerSummary || []).map(s => [s.project, s.totalToday]))
-          // Merge: active timers first, then completed-only projects
           const allProjects: { project: string; active: boolean; startedAt?: string; totalToday: number }[] = []
 
-          // Active timers
           for (const t of timerActive || []) {
             allProjects.push({
               project: t.project,
@@ -298,7 +397,6 @@ export default function Dashboard() {
             })
           }
 
-          // Completed-only projects from summary
           for (const s of timerSummary || []) {
             if (!activeProjects.has(s.project)) {
               allProjects.push({
@@ -331,7 +429,6 @@ export default function Dashboard() {
                 const liveElapsed = p.active && p.startedAt
                   ? Math.round((Date.now() - new Date(p.startedAt).getTime()) / 1000)
                   : 0
-                // Use tick to force re-render
                 void tick
 
                 return (
@@ -341,16 +438,38 @@ export default function Dashboard() {
                   )}>
                     <div className="flex items-center gap-2.5 min-w-0">
                       {p.active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse flex-shrink-0" />}
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: getProjectColor(p.project) }} />
                       <span className={clsx('text-sm truncate', p.active ? 'text-white font-medium' : 'text-zinc-400')}>
                         {p.project}
                       </span>
                     </div>
-                    <span className={clsx(
-                      'font-mono text-sm tabular-nums flex-shrink-0 ml-3',
-                      p.active ? 'text-green-400 font-semibold' : 'text-zinc-500'
-                    )}>
-                      {formatDuration(p.active ? liveElapsed : p.totalToday)}
-                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                      <span className={clsx(
+                        'font-mono text-sm tabular-nums',
+                        p.active ? 'text-green-400 font-semibold' : 'text-zinc-500'
+                      )}>
+                        {formatDuration(p.active ? liveElapsed : p.totalToday)}
+                      </span>
+                      {p.active ? (
+                        <button
+                          onClick={() => handleStopTimer(p.project)}
+                          disabled={timerLoading === p.project}
+                          className="flex items-center gap-1 px-2 py-1 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-medium transition-colors"
+                        >
+                          <StopCircle size={12} />
+                          Stop
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleStartTimer(p.project)}
+                          disabled={timerLoading === p.project}
+                          className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs font-medium transition-colors"
+                        >
+                          <Play size={12} />
+                          Start
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )
               })}
