@@ -44,9 +44,12 @@ export function Sidebar() {
   }, [])
 
   useEffect(() => {
-    fetchLogAlerts()
+    const initialFetch = setTimeout(fetchLogAlerts, 0)
     const interval = setInterval(fetchLogAlerts, 60_000)
-    return () => clearInterval(interval)
+    return () => {
+      clearTimeout(initialFetch)
+      clearInterval(interval)
+    }
   }, [fetchLogAlerts])
 
   const handleLogout = async () => {

@@ -3,15 +3,13 @@ import { jwtVerify } from 'jose'
 
 const PUBLIC_PATHS = ['/login', '/api/auth/login']
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow public paths
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     return NextResponse.next()
   }
 
-  // API routes: accept Bearer token OR JWT cookie
   if (pathname.startsWith('/api/')) {
     const authHeader = request.headers.get('authorization')
     if (authHeader?.startsWith('Bearer ')) {
@@ -21,7 +19,6 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Fall through to JWT check
     const jwt = request.cookies.get('session')?.value
     if (jwt && await verifyToken(jwt)) {
       return NextResponse.next()
@@ -30,8 +27,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Dashboard pages: open access (no login required)
-  return NextResponse.next()
+  const jwt = request.cookies.get('session')?.value
+  if (jwt && await verifyToken(jwt)) {
+    return NextResponse.next()
+  }
+
+  const loginUrl = new URL('/login', request.url)
+  loginUrl.searchParams.set('next', pathname)
+  return NextResponse.redirect(loginUrl)
 }
 
 async function verifyToken(token: string): Promise<boolean> {

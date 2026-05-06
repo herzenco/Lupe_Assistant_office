@@ -165,6 +165,9 @@ CREATE TABLE timer_sessions (
 );
 
 CREATE INDEX idx_timer_sessions_started ON timer_sessions(started_at DESC);
+CREATE UNIQUE INDEX idx_timer_sessions_active_project
+  ON timer_sessions(project)
+  WHERE stopped_at IS NULL;
 
 ALTER TABLE timer_sessions ENABLE ROW LEVEL SECURITY;
 

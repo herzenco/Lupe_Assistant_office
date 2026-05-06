@@ -29,8 +29,8 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
     try {
       await onCreate(name.trim(), slug, description.trim() || undefined)
       onClose()
-    } catch (err: any) {
-      setError(err.message || 'Failed to create project')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create project')
     } finally {
       setSubmitting(false)
     }

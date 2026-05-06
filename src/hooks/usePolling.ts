@@ -24,7 +24,7 @@ export function usePolling<T>(
   }, [fetchFn])
 
   useEffect(() => {
-    refresh()
+    const initialRefresh = setTimeout(refresh, 0)
 
     const startPolling = () => {
       intervalRef.current = setInterval(refresh, intervalMs)
@@ -50,6 +50,7 @@ export function usePolling<T>(
     document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
+      clearTimeout(initialRefresh)
       stopPolling()
       document.removeEventListener('visibilitychange', handleVisibility)
     }

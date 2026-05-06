@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { usePolling } from '@/hooks/usePolling'
 import { PageHeader } from '@/components/PageHeader'
 import { formatDistanceToNow } from 'date-fns'
@@ -36,11 +36,17 @@ export default function ActivityFeed() {
   }, [])
 
   const { data: heartbeats, loading } = usePolling(fetchHeartbeats, 30_000)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 30_000)
+    return () => clearInterval(interval)
+  }, [])
 
   const latest = heartbeats?.[0]
   const statusConfig = latest ? STATUS_CONFIG[latest.status] : STATUS_CONFIG.idle
   const isStale = latest
-    ? Date.now() - new Date(latest.timestamp).getTime() > 120_000
+    ? nowMs - new Date(latest.timestamp).getTime() > 120_000
     : true
 
   return (

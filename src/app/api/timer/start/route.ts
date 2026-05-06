@@ -41,6 +41,25 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
+    if (error.code === '23505') {
+      const { data: active, error: activeError } = await supabaseAdmin
+        .from('timer_sessions')
+        .select('*')
+        .eq('project', project)
+        .is('stopped_at', null)
+        .limit(1)
+        .maybeSingle()
+
+      if (!activeError && active) {
+        return NextResponse.json({
+          project: active.project,
+          startedAt: active.started_at,
+          elapsed: Math.round((Date.now() - new Date(active.started_at).getTime()) / 1000),
+          running: true,
+        })
+      }
+    }
+
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 

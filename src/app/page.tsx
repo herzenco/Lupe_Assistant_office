@@ -1,15 +1,15 @@
 'use client'
 
-import { useCallback, useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { usePolling } from '@/hooks/usePolling'
 import { formatDistanceToNow, format } from 'date-fns'
 import type { Heartbeat, Task, Action } from '@/lib/types'
 import { TASK_STATUS_LABELS, PRIORITY_COLORS, ACTION_TYPE_LABELS, ACTION_TYPE_COLORS } from '@/lib/constants'
 import { useProjects } from '@/hooks/useProjects'
-import type { ActionType, TaskPriority } from '@/lib/types'
+import type { ActionType } from '@/lib/types'
 import {
-  Activity, Cpu, Zap, DollarSign, LayoutList, Clock,
-  Heart, AlertTriangle, TrendingUp, CheckCircle2, Briefcase,
+  Activity, Cpu, DollarSign, LayoutList, Clock,
+  Heart, AlertTriangle, Briefcase,
   Timer, Square, PieChart as PieChartIcon, FileText, Play, StopCircle,
   ChevronDown
 } from 'lucide-react'
@@ -55,13 +55,6 @@ interface TimerActive {
   startedAt: string
   elapsed: number
   running: true
-}
-
-interface TimerHistoryEntry {
-  project: string
-  startedAt: string
-  stoppedAt: string
-  duration: number
 }
 
 interface TimerSummaryEntry {
@@ -148,13 +141,6 @@ export default function Dashboard() {
     return res.ok ? (res.json() as Promise<TimerStatsData>) : null
   }, [])
 
-  const fetchFileCounts = useCallback(async () => {
-    const res = await fetch('/api/files')
-    if (!res.ok) return null
-    const data = await res.json()
-    return data.counts as Record<string, number>
-  }, [])
-
   const { data: heartbeats } = usePolling(fetchHeartbeats, 30_000)
   const { data: costs } = usePolling(fetchCosts, 60_000)
   const { data: tasks } = usePolling(fetchTasks, 60_000)
@@ -164,7 +150,6 @@ export default function Dashboard() {
   const { data: timerActive } = usePolling(fetchTimerActive, 10_000)
   const { data: timerSummary } = usePolling(fetchTimerSummary, 10_000)
   const { data: timerStats } = usePolling(fetchTimerStats, 60_000)
-  const { data: fileCounts } = usePolling(fetchFileCounts, 120_000)
   const { projects, getProjectColor } = useProjects()
 
   // Timer controls state
@@ -217,21 +202,17 @@ export default function Dashboard() {
   }, [fetchTimerRefresh])
 
   // Live ticking clocks for all active timers
-  const [tick, setTick] = useState(0)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current)
-    if (timerActive && timerActive.length > 0) {
-      timerRef.current = setInterval(() => setTick(t => t + 1), 1000)
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [timerActive])
+    const interval = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   const latest = heartbeats?.[0]
   const statusConfig = latest ? STATUS_CONFIG[latest.status] : STATUS_CONFIG.idle
   const isStale = latest
-    ? Date.now() - new Date(latest.timestamp).getTime() > 120_000
+    ? nowMs - new Date(latest.timestamp).getTime() > 120_000
     : true
 
   const activeTasks = (tasks || []).filter(t => t.status === 'in_progress')
@@ -418,7 +399,7 @@ export default function Dashboard() {
 
           const grandTotal = allProjects.reduce((sum, p) => {
             if (p.active && p.startedAt) {
-              return sum + Math.round((Date.now() - new Date(p.startedAt).getTime()) / 1000)
+              return sum + Math.round((nowMs - new Date(p.startedAt).getTime()) / 1000)
             }
             return sum + p.totalToday
           }, 0)
@@ -427,9 +408,8 @@ export default function Dashboard() {
             <div className="space-y-1">
               {allProjects.map((p, i) => {
                 const liveElapsed = p.active && p.startedAt
-                  ? Math.round((Date.now() - new Date(p.startedAt).getTime()) / 1000)
+                  ? Math.round((nowMs - new Date(p.startedAt).getTime()) / 1000)
                   : 0
-                void tick
 
                 return (
                   <div key={i} className={clsx(

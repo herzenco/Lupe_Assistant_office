@@ -1,0 +1,26 @@
+{
+  "project_name": "Lupe_Assistant_office",
+  "databases": [
+    {
+      "name": "main_db",
+      "type": "supabase",
+      "connection_env": "SUPABASE_SERVICE_ROLE_KEY",
+      "url_env": "SUPABASE_URL",
+      "critical_tables": [
+        "heartbeats",
+        "cost_entries",
+        "sessions",
+        "tasks",
+        "system_health",
+        "actions",
+        "codexbar_costs",
+        "projects",
+        "timer_sessions",
+        "cron_runs"
+      ],
+      "always_backup": true
+    }
+  ],
+  "protected_branches": ["main"],
+  "risk_level": "paranoid"
+}

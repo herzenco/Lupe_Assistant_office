@@ -7,9 +7,8 @@ import { NewProjectModal } from '@/components/NewProjectModal'
 import { PageHeader } from '@/components/PageHeader'
 import { ACTION_TYPE_LABELS, ACTION_TYPE_COLORS, ACTION_TYPES } from '@/lib/constants'
 import type { Action, ActionType } from '@/lib/types'
-import { Search, Filter, FolderPlus } from 'lucide-react'
+import { Search, FolderPlus } from 'lucide-react'
 import { format } from 'date-fns'
-import { clsx } from 'clsx'
 
 interface ActionsData {
   actions: Action[]

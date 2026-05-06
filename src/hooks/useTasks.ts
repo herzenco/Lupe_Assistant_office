@@ -22,7 +22,10 @@ export function useTasks() {
     }
   }, [])
 
-  useEffect(() => { fetchTasks() }, [fetchTasks])
+  useEffect(() => {
+    const initialFetch = setTimeout(fetchTasks, 0)
+    return () => clearTimeout(initialFetch)
+  }, [fetchTasks])
 
   const createTask = async (task: Partial<Task>) => {
     const res = await fetch('/api/tasks', {

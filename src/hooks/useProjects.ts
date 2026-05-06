@@ -25,7 +25,8 @@ export function useProjects() {
   }, [])
 
   useEffect(() => {
-    fetchProjects()
+    const initialFetch = setTimeout(fetchProjects, 0)
+    return () => clearTimeout(initialFetch)
   }, [fetchProjects])
 
   const createProject = async (name: string, slug: string, description?: string) => {

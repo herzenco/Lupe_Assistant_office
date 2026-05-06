@@ -21,9 +21,10 @@ export default function LoginPage() {
     })
 
     if (res.ok) {
-      router.push('/')
+      const next = new URLSearchParams(window.location.search).get('next')
+      router.push(next?.startsWith('/') ? next : '/')
     } else {
-      setError('Wrong password')
+      setError(res.status === 429 ? 'Too many attempts. Try again later.' : 'Wrong password')
       setLoading(false)
     }
   }
