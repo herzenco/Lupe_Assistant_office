@@ -168,6 +168,23 @@ CREATE INDEX idx_timer_sessions_started ON timer_sessions(started_at DESC);
 
 ALTER TABLE timer_sessions ENABLE ROW LEVEL SECURITY;
 
+-- Cron runs: job execution logs
+CREATE TABLE cron_runs (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  job_id text NOT NULL,
+  job_name text NOT NULL,
+  status text NOT NULL CHECK (status IN ('ok', 'error', 'timeout')),
+  error text,
+  duration_ms integer,
+  delivered boolean DEFAULT false,
+  ran_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_cron_runs_ran_at ON cron_runs(ran_at DESC);
+CREATE INDEX idx_cron_runs_status ON cron_runs(status);
+
+ALTER TABLE cron_runs ENABLE ROW LEVEL SECURITY;
+
 -- RLS enabled but no policies — service role key bypasses RLS
 ALTER TABLE heartbeats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cost_entries ENABLE ROW LEVEL SECURITY;

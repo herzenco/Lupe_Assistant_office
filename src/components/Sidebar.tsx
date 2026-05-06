@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { clsx } from 'clsx'
@@ -13,6 +14,7 @@ import {
   Zap,
   LayoutDashboard,
   LogOut,
+  ScrollText,
 } from 'lucide-react'
 
 const navItems = [
@@ -21,6 +23,7 @@ const navItems = [
   { href: '/costs', label: 'Costs', icon: DollarSign },
   { href: '/tasks', label: 'Tasks', icon: LayoutList },
   { href: '/actions', label: 'Actions', icon: Zap },
+  { href: '/logs', label: 'Cron Logs', icon: ScrollText, badgeKey: 'logs' as const },
   { href: '/calendar', label: 'Calendar', icon: Calendar },
   { href: '/sessions', label: 'Sessions', icon: MessageSquare },
   { href: '/health', label: 'Health', icon: Heart },
@@ -28,6 +31,23 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const [logAlertCount, setLogAlertCount] = useState(0)
+
+  const fetchLogAlerts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/logs?days=1')
+      if (res.ok) {
+        const data = await res.json()
+        setLogAlertCount(data.alertCount || 0)
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    fetchLogAlerts()
+    const interval = setInterval(fetchLogAlerts, 60_000)
+    return () => clearInterval(interval)
+  }, [fetchLogAlerts])
 
   const handleLogout = async () => {
     document.cookie = 'session=; Max-Age=0; path=/'
@@ -42,8 +62,9 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 space-y-1">
-        {navItems.map(({ href, label, icon: Icon }) => {
+        {navItems.map(({ href, label, icon: Icon, badgeKey }) => {
           const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href)
+          const badgeCount = badgeKey === 'logs' ? logAlertCount : 0
           return (
             <Link
               key={href}
@@ -57,6 +78,11 @@ export function Sidebar() {
             >
               <Icon size={18} />
               {label}
+              {badgeCount > 0 && (
+                <span className="ml-auto flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                  {badgeCount}
+                </span>
+              )}
             </Link>
           )
         })}
