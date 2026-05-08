@@ -46,6 +46,14 @@ Fill in `LUPE_DASHBOARD_KEY` in `lupe.env`, then launch OpenClaw through the das
 
 That script loads `lupe.env`, verifies the dashboard connection, sends a startup heartbeat, flushes any queued dashboard events, then starts `openclaw`.
 
+By default it starts `openclaw tui`. To launch a different OpenClaw command, either pass it through:
+
+```bash
+./scripts/start-lupe-openclaw.sh gateway
+```
+
+or set `LUPE_OPENCLAW_COMMAND` in `lupe.env`.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

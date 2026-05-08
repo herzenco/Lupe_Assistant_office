@@ -30,5 +30,13 @@ python3 client/startup.py
 echo "Flushing queued dashboard events..."
 python3 client/flush_queue.py || true
 
-echo "Launching OpenClaw..."
-exec openclaw "$@"
+if [[ "$#" -gt 0 ]]; then
+  command=("$@")
+elif [[ -n "${LUPE_OPENCLAW_COMMAND:-}" ]]; then
+  read -r -a command <<< "$LUPE_OPENCLAW_COMMAND"
+else
+  command=(tui)
+fi
+
+echo "Launching OpenClaw: openclaw ${command[*]}"
+exec openclaw "${command[@]}"
