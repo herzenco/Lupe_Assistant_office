@@ -11,7 +11,7 @@ def main():
         action_type="session_start",
         task="OpenClaw worker online",
         detail="Lupe started and is connected to the dashboard",
-        session_type="openclaw",
+        session_type="main",
     )
 
     if not heartbeat_result or not heartbeat_result.get("ok"):
