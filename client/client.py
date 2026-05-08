@@ -7,11 +7,12 @@ for later retry via flush_queue.py.
 
 import json
 import os
+import socket
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-
-import psutil
-import requests
 
 BASE_URL = os.environ.get("LUPE_DASHBOARD_URL", "http://localhost:3000")
 API_KEY = os.environ.get("LUPE_DASHBOARD_KEY", "")
@@ -46,17 +47,24 @@ def _enqueue(endpoint, payload):
 
 def _post(endpoint, payload):
     """Fire-and-forget POST. Queue on failure."""
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        f"{BASE_URL}{endpoint}",
+        data=data,
+        headers=_headers(),
+        method="POST",
+    )
     try:
-        r = requests.post(
-            f"{BASE_URL}{endpoint}",
-            json=payload,
-            headers=_headers(),
-            timeout=TIMEOUT,
-        )
-        if r.status_code >= 400:
-            _enqueue(endpoint, payload)
-            return r.json() if r.headers.get("content-type", "").startswith("application/json") else None
-        return r.json()
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body else None
+    except urllib.error.HTTPError as error:
+        _enqueue(endpoint, payload)
+        try:
+            body = error.read().decode("utf-8")
+            return json.loads(body) if body else None
+        except Exception:
+            return None
     except Exception:
         _enqueue(endpoint, payload)
         return None
@@ -64,16 +72,16 @@ def _post(endpoint, payload):
 
 def _get(endpoint, params=None):
     """GET request. Returns parsed JSON or None."""
+    query = f"?{urllib.parse.urlencode(params)}" if params else ""
+    request = urllib.request.Request(
+        f"{BASE_URL}{endpoint}{query}",
+        headers=_headers(),
+        method="GET",
+    )
     try:
-        r = requests.get(
-            f"{BASE_URL}{endpoint}",
-            params=params,
-            headers=_headers(),
-            timeout=TIMEOUT,
-        )
-        if r.status_code >= 400:
-            return None
-        return r.json()
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body else None
     except Exception:
         return None
 
@@ -81,6 +89,8 @@ def _get(endpoint, params=None):
 def _system_metrics():
     """Collect CPU, RAM, disk usage via psutil."""
     try:
+        import psutil
+
         return {
             "cpu_pct": psutil.cpu_percent(interval=0.5),
             "ram_pct": psutil.virtual_memory().percent,
@@ -104,6 +114,18 @@ def _current_model():
         if value:
             return value
     return None
+
+
+def _machine_identity():
+    """Return the identity Lupe should use when reporting local health."""
+    hostname = socket.gethostname()
+    machine_id = os.environ.get("LUPE_MACHINE_ID") or hostname
+    agent_name = os.environ.get("LUPE_AGENT_NAME") or os.environ.get("LUPE_MACHINE_NAME") or machine_id
+    return {
+        "machine_id": machine_id,
+        "agent_name": agent_name,
+        "hostname": hostname,
+    }
 
 
 def _load_integration_checks():
@@ -131,6 +153,7 @@ def heartbeat(
         "status": status,
         "session_type": session_type,
         "model": model or _current_model(),
+        **_machine_identity(),
     }
 
     if task is not None:
@@ -251,17 +274,20 @@ def update_task(task_id, status=None, add_note=None):
     if not payload:
         return None
 
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        f"{BASE_URL}/api/tasks/{task_id}",
+        data=data,
+        headers=_headers(),
+        method="PATCH",
+    )
     try:
-        r = requests.patch(
-            f"{BASE_URL}/api/tasks/{task_id}",
-            json=payload,
-            headers=_headers(),
-            timeout=TIMEOUT,
-        )
-        if r.status_code >= 400:
-            _enqueue(f"/api/tasks/{task_id}", payload)
-            return None
-        return r.json()
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body else None
+    except urllib.error.HTTPError:
+        _enqueue(f"/api/tasks/{task_id}", payload)
+        return None
     except Exception:
         _enqueue(f"/api/tasks/{task_id}", payload)
         return None

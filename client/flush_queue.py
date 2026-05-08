@@ -3,9 +3,9 @@
 import json
 import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
-
-import requests
 
 BASE_URL = os.environ.get("LUPE_DASHBOARD_URL", "http://localhost:3000")
 API_KEY = os.environ.get("LUPE_DASHBOARD_KEY", "")
@@ -18,6 +18,18 @@ def _headers():
         "Content-Type": "application/json",
         "Authorization": f"Bearer {API_KEY}",
     }
+
+
+def _send(method, endpoint, payload):
+    request = urllib.request.Request(
+        f"{BASE_URL}{endpoint}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=_headers(),
+        method=method,
+    )
+    with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+        response.read()
+        return response.status
 
 
 def flush():
@@ -52,27 +64,17 @@ def flush():
         method = "PATCH" if "/api/tasks/" in endpoint and endpoint != "/api/tasks" else "POST"
 
         try:
-            if method == "PATCH":
-                r = requests.patch(
-                    f"{BASE_URL}{endpoint}",
-                    json=payload,
-                    headers=_headers(),
-                    timeout=TIMEOUT,
-                )
-            else:
-                r = requests.post(
-                    f"{BASE_URL}{endpoint}",
-                    json=payload,
-                    headers=_headers(),
-                    timeout=TIMEOUT,
-                )
+            status = _send(method, endpoint, payload)
 
-            if r.status_code < 400:
+            if status < 400:
                 delivered += 1
                 print(f"  ✓ {endpoint}")
             else:
                 failed.append(line)
-                print(f"  ✗ {endpoint} — {r.status_code}")
+                print(f"  ✗ {endpoint} — {status}")
+        except urllib.error.HTTPError as e:
+            failed.append(line)
+            print(f"  ✗ {endpoint} — {e.code}")
         except Exception as e:
             failed.append(line)
             print(f"  ✗ {endpoint} — {e}")
