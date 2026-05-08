@@ -71,7 +71,6 @@ export default function HealthPage() {
   const integrations = data?.health?.integrations || {}
   const reportedBy = data?.health?.agent_name || data?.health?.machine_id || data?.health?.hostname
   const integrationList = [
-    { name: 'Google Calendar', key: 'google_calendar' },
     { name: 'Google Drive', key: 'google_drive' },
     { name: 'GitHub', key: 'github' },
     { name: 'ClickUp', key: 'clickup' },

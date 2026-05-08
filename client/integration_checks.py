@@ -47,22 +47,15 @@ def check_clickup():
         with urllib.request.urlopen(request, timeout=5) as response:
             return _status("up" if response.status == 200 else "down")
     except urllib.error.HTTPError as error:
-        return _status("up" if error.code == 200 else "down")
-    except Exception:
-        return _status("down")
+        return _status("down", reason=f"ClickUp API returned {error.code}")
+    except Exception as error:
+        return _status("down", reason=f"ClickUp check failed: {error.__class__.__name__}")
 
 
 def check_github():
     if not shutil.which("gh"):
         return _missing_tool("GitHub CLI")
     up = _run(["gh", "auth", "status"])
-    return _status("up" if up else "down")
-
-
-def check_google_calendar():
-    if not shutil.which("gcalcli"):
-        return _missing_tool("gcalcli")
-    up = _run(["gcalcli", "list", "--nocolor"], timeout=10)
     return _status("up" if up else "down")
 
 
@@ -94,7 +87,6 @@ def get_all():
     return {
         "clickup": check_clickup(),
         "github": check_github(),
-        "google_calendar": check_google_calendar(),
         "google_drive": check_google_drive(),
         "telegram": check_telegram(),
     }

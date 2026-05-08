@@ -6,7 +6,6 @@ export const dynamic = 'force-dynamic'
 const INTEGRATION_KEYS = [
   'clickup',
   'github',
-  'google_calendar',
   'google_drive',
   'telegram',
 ]
