@@ -8,27 +8,13 @@ import { TASK_STATUS_LABELS, PRIORITY_COLORS, ACTION_TYPE_LABELS, ACTION_TYPE_CO
 import { useProjects } from '@/hooks/useProjects'
 import type { ActionType } from '@/lib/types'
 import {
-  Activity, Cpu, DollarSign, LayoutList, Clock,
-  Heart, AlertTriangle, Briefcase,
+  Activity, Cpu, LayoutList, Clock,
+  Heart, Briefcase,
   Timer, Square, PieChart as PieChartIcon, FileText, Play, StopCircle,
   ChevronDown
 } from 'lucide-react'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { clsx } from 'clsx'
 import Link from 'next/link'
-
-interface CostData {
-  total_spend: number
-  budget: number
-  budget_pct: number
-  projected_spend: number
-  budget_remaining: number
-  source: 'codexbar' | 'sessions'
-  codexbar_spend: number
-  session_spend: number
-  by_provider?: Record<string, { cost: number; tokens_total: number; reported_at: string }>
-  by_model: Record<string, { cost: number; tokens_in: number; tokens_out: number }>
-}
 
 interface HealthData {
   health: {
@@ -71,6 +57,7 @@ interface TimerStatsProject {
 }
 
 interface TimerStatsData {
+  asOf: string
   projects: TimerStatsProject[]
   totals: { today: number; week: number; month: number; year: number }
 }
@@ -89,6 +76,57 @@ function formatHoursMinutes(totalSeconds: number): string {
   return `${h}h ${m}m`
 }
 
+function TimeDistributionRing({
+  projects,
+  getProjectColor,
+}: {
+  projects: TimerStatsProject[]
+  getProjectColor: (project: string) => string
+}) {
+  const data = projects.filter(p => p.week > 0)
+  const total = data.reduce((sum, p) => sum + p.week, 0)
+  const radius = 58
+  const circumference = 2 * Math.PI * radius
+  const segments = data.reduce<Array<{ project: TimerStatsProject; length: number; offset: number }>>((items, project) => {
+    const length = (project.week / total) * circumference
+    const offset = items.reduce((sum, item) => sum + item.length, 0)
+    return [...items, { project, length, offset }]
+  }, [])
+
+  if (total === 0) {
+    return (
+      <div className="h-48 flex items-center justify-center text-sm text-zinc-500">
+        No tracked time this week
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-48 flex items-center justify-center">
+      <svg viewBox="0 0 160 160" role="img" aria-label="Time distribution this week" className="h-40 w-40 overflow-visible">
+        <circle cx="80" cy="80" r={radius} fill="none" stroke="rgb(39 39 42)" strokeWidth="28" />
+        {segments.map(({ project, length, offset }) => (
+            <circle
+              key={project.project}
+              cx="80"
+              cy="80"
+              r={radius}
+              fill="none"
+              stroke={getProjectColor(project.project)}
+              strokeWidth="28"
+              strokeDasharray={`${length} ${circumference - length}`}
+              strokeDashoffset={-offset}
+              strokeLinecap="butt"
+              transform="rotate(-90 80 80)"
+            >
+              <title>{`${project.project}: ${formatDuration(project.week)}`}</title>
+            </circle>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
 const STATUS_CONFIG = {
   active: { color: 'bg-green-500', label: 'Active', ring: 'ring-green-500/30', text: 'text-green-400' },
   idle: { color: 'bg-zinc-500', label: 'Idle', ring: 'ring-zinc-500/30', text: 'text-zinc-400' },
@@ -99,11 +137,6 @@ export default function Dashboard() {
   const fetchHeartbeats = useCallback(async () => {
     const res = await fetch('/api/heartbeat')
     return res.ok ? (res.json() as Promise<Heartbeat[]>) : []
-  }, [])
-
-  const fetchCosts = useCallback(async () => {
-    const res = await fetch('/api/cost')
-    return res.ok ? (res.json() as Promise<CostData>) : null
   }, [])
 
   const fetchTasks = useCallback(async () => {
@@ -142,7 +175,6 @@ export default function Dashboard() {
   }, [])
 
   const { data: heartbeats } = usePolling(fetchHeartbeats, 30_000)
-  const { data: costs } = usePolling(fetchCosts, 60_000)
   const { data: tasks } = usePolling(fetchTasks, 60_000)
   const { data: health } = usePolling(fetchHealth, 30_000)
   const { data: actionsData } = usePolling(fetchActions, 30_000)
@@ -224,8 +256,58 @@ export default function Dashboard() {
     return t.updated_at.startsWith(today)
   }).length
 
-  const budgetPct = costs?.budget_pct || 0
-  const barColor = budgetPct >= 100 ? 'bg-red-500' : budgetPct >= 90 ? 'bg-red-400' : budgetPct >= 75 ? 'bg-yellow-500' : 'bg-green-500'
+  const liveTimerStats = (() => {
+    if (!timerStats) return null
+    const stats = {
+      asOf: timerStats.asOf,
+      projects: timerStats.projects.map(p => ({ ...p })),
+      totals: { ...timerStats.totals },
+    }
+    const asOfMs = timerStats.asOf ? new Date(timerStats.asOf).getTime() : nowMs
+    const liveDelta = Math.max(0, Math.round((nowMs - asOfMs) / 1000))
+    if (liveDelta === 0) return stats
+
+    for (const active of timerActive || []) {
+      const startedAt = new Date(active.startedAt)
+      let project = stats.projects.find(p => p.project === active.project)
+      if (!project) {
+        project = { project: active.project, today: 0, week: 0, month: 0, year: 0 }
+        stats.projects.push(project)
+      }
+
+      project.year += liveDelta
+      stats.totals.year += liveDelta
+
+      const now = new Date(nowMs)
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+      const weekStart = new Date(now)
+      weekStart.setDate(now.getDate() - now.getDay())
+      weekStart.setHours(0, 0, 0, 0)
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+      if (startedAt <= now && now >= monthStart) {
+        project.month += liveDelta
+        stats.totals.month += liveDelta
+      }
+      if (startedAt <= now && now >= weekStart) {
+        project.week += liveDelta
+        stats.totals.week += liveDelta
+      }
+      if (startedAt <= now && now >= todayStart) {
+        project.today += liveDelta
+        stats.totals.today += liveDelta
+      }
+    }
+
+    return stats
+  })()
+
+  const healthAgeMs = health?.health?.timestamp
+    ? nowMs - new Date(health.health.timestamp).getTime()
+    : Number.POSITIVE_INFINITY
+  const healthIsFresh = healthAgeMs <= 120_000
+  const displayHealth = healthIsFresh ? health?.health : null
 
   const integrationsUp = health?.health?.integrations
     ? Object.values(health.health.integrations).filter(i => i.status === 'up').length
@@ -256,20 +338,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* Budget alert */}
-      {budgetPct >= 75 && (
-        <div className={clsx(
-          'rounded-lg px-4 py-3 mb-6 flex items-center gap-2 border',
-          budgetPct >= 100 ? 'bg-red-500/10 border-red-500/30' : budgetPct >= 90 ? 'bg-red-500/10 border-red-500/20' : 'bg-yellow-500/10 border-yellow-500/20'
-        )}>
-          <AlertTriangle size={16} className={budgetPct >= 90 ? 'text-red-400' : 'text-yellow-400'} />
-          <span className={clsx('text-sm', budgetPct >= 90 ? 'text-red-300' : 'text-yellow-300')}>
-            {budgetPct >= 100 ? 'Over budget!' : budgetPct >= 90 ? 'Critical: 90%+ of budget used' : 'Warning: 75%+ of budget used'}
-            {' — '}${costs?.total_spend?.toFixed(2)} of ${costs?.budget}
-          </span>
-        </div>
-      )}
 
       {/* Stale heartbeat alert */}
       {health?.heartbeat_stale && (
@@ -467,7 +535,7 @@ export default function Dashboard() {
       </div>
 
       {/* Time Distribution Pie Chart + Project Time Stats */}
-      {timerStats && timerStats.projects.length > 0 && (
+      {liveTimerStats && liveTimerStats.projects.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Pie Chart */}
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
@@ -475,43 +543,10 @@ export default function Dashboard() {
               <PieChartIcon size={14} className="text-zinc-500" />
               <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Time Distribution (This Week)</span>
             </div>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={timerStats.projects.filter(p => p.week > 0).map(p => ({
-                      name: p.project,
-                      value: p.week,
-                    }))}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={45}
-                    outerRadius={75}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {timerStats.projects.filter(p => p.week > 0).map((p) => (
-                      <Cell key={p.project} fill={getProjectColor(p.project)} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    content={({ payload }) => {
-                      if (!payload?.length) return null
-                      const d = payload[0]
-                      return (
-                        <div className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs">
-                          <p className="text-white font-medium">{d.name}</p>
-                          <p className="text-zinc-400">{formatDuration(d.value as number)}</p>
-                        </div>
-                      )
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <TimeDistributionRing projects={liveTimerStats.projects} getProjectColor={getProjectColor} />
             {/* Legend */}
             <div className="flex flex-wrap gap-3 mt-2">
-              {timerStats.projects.filter(p => p.week > 0).map((p) => {
+              {liveTimerStats.projects.filter(p => p.week > 0).map((p) => {
                 const color = getProjectColor(p.project)
                 return (
                   <div key={p.project} className="flex items-center gap-1.5">
@@ -538,7 +573,7 @@ export default function Dashboard() {
                 <span className="text-right">Month</span>
                 <span className="text-right">Year</span>
               </div>
-              {timerStats.projects
+              {liveTimerStats.projects
                 .sort((a, b) => b.week - a.week)
                 .map(p => {
                   const color = getProjectColor(p.project)
@@ -558,10 +593,10 @@ export default function Dashboard() {
               {/* Totals row */}
               <div className="grid grid-cols-5 gap-2 pt-2 border-t border-zinc-800 text-sm items-center">
                 <span className="col-span-1 text-xs font-semibold text-zinc-400">Total</span>
-                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(timerStats.totals.today)}</span>
-                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(timerStats.totals.week)}</span>
-                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(timerStats.totals.month)}</span>
-                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(timerStats.totals.year)}</span>
+                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(liveTimerStats.totals.today)}</span>
+                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(liveTimerStats.totals.week)}</span>
+                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(liveTimerStats.totals.month)}</span>
+                <span className="text-right font-mono text-xs font-semibold text-zinc-300 tabular-nums">{formatDuration(liveTimerStats.totals.year)}</span>
               </div>
             </div>
           </div>
@@ -569,22 +604,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Link href="/costs" className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 hover:border-zinc-700 transition-colors">
-          <div className="flex items-center gap-2 mb-2">
-            <DollarSign size={14} className="text-zinc-500" />
-            <span className="text-xs text-zinc-500">Monthly Spend</span>
-          </div>
-          <p className="text-2xl font-bold text-white">${costs?.total_spend?.toFixed(2) || '0.00'}</p>
-          <div className="mt-2 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-            <div className={clsx('h-full rounded-full', barColor)} style={{ width: `${Math.min(budgetPct, 100)}%` }} />
-          </div>
-          <p className="text-xs text-zinc-500 mt-1">{budgetPct}% of ${costs?.budget || 150}</p>
-          <p className="text-xs mt-1" style={{ color: costs?.source === 'codexbar' ? '#10b981' : '#6b7280' }}>
-            {costs?.source === 'codexbar' ? 'CodexBar (Claude + Codex)' : 'Session spend'}
-          </p>
-        </Link>
-
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <Link href="/tasks" className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 hover:border-zinc-700 transition-colors">
           <div className="flex items-center gap-2 mb-2">
             <LayoutList size={14} className="text-zinc-500" />
@@ -604,13 +624,14 @@ export default function Dashboard() {
             <span className="text-xs text-zinc-500">System</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-bold text-white">{health?.health?.cpu_pct?.toFixed(0) ?? '—'}%</p>
+            <p className="text-2xl font-bold text-white">{displayHealth?.cpu_pct?.toFixed(0) ?? '—'}%</p>
             <span className="text-xs text-zinc-500">CPU</span>
           </div>
           <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400">
-            <span>RAM {health?.health?.ram_pct?.toFixed(0) ?? '—'}%</span>
-            <span>Disk {health?.health?.disk_pct?.toFixed(0) ?? '—'}%</span>
+            <span>RAM {displayHealth?.ram_pct?.toFixed(0) ?? '—'}%</span>
+            <span>Disk {displayHealth?.disk_pct?.toFixed(0) ?? '—'}%</span>
           </div>
+          {!healthIsFresh && <p className="text-xs text-zinc-500 mt-2">No recent local metrics</p>}
         </Link>
 
         <Link href="/health" className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 hover:border-zinc-700 transition-colors">
@@ -625,7 +646,7 @@ export default function Dashboard() {
             {integrationsUp === integrationsTotal && integrationsTotal > 0
               ? <span className="text-green-400">All connected</span>
               : integrationsTotal > 0
-                ? <span className="text-yellow-400">{integrationsTotal - integrationsUp} down</span>
+                ? <span className="text-yellow-400">{integrationsTotal - integrationsUp} need attention</span>
                 : 'No data'}
           </p>
         </Link>
@@ -708,7 +729,7 @@ export default function Dashboard() {
       {(() => {
         const allActions = allActionsData?.actions || []
         const allTasks = tasks || []
-        const timeByProject = timerStats?.projects || []
+        const timeByProject = liveTimerStats?.projects || []
 
         // Build stats for all known projects from DB
         const projectStats: Record<string, { actions: number; tasks: number; active: number; completed: number; files: number; timeMonth: number }> = {}

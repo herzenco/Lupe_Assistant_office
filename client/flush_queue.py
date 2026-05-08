@@ -7,7 +7,7 @@ from pathlib import Path
 
 import requests
 
-BASE_URL = os.environ.get("LUPE_DASHBOARD_URL", "http://localhost:3001")
+BASE_URL = os.environ.get("LUPE_DASHBOARD_URL", "http://localhost:3000")
 API_KEY = os.environ.get("LUPE_DASHBOARD_KEY", "")
 QUEUE_FILE = Path.home() / ".openclaw" / "workspace" / "dashboard-queue.jsonl"
 TIMEOUT = 10

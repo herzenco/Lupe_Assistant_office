@@ -5,9 +5,10 @@ import sys
 
 # Set defaults if not in env
 if "LUPE_DASHBOARD_URL" not in os.environ:
-    os.environ["LUPE_DASHBOARD_URL"] = "http://localhost:3001"
-if "LUPE_DASHBOARD_KEY" not in os.environ:
-    os.environ["LUPE_DASHBOARD_KEY"] = "87f0fcc5524cdbcdbcfc8f401032c42f6af2924d9b2c389fbbf937ca634ec73e"
+    os.environ["LUPE_DASHBOARD_URL"] = "http://localhost:3000"
+if not os.environ.get("LUPE_DASHBOARD_KEY"):
+    print("Set LUPE_DASHBOARD_KEY before running this check.")
+    sys.exit(1)
 
 from client import heartbeat, _system_metrics
 
@@ -30,7 +31,6 @@ result = heartbeat(
     task="Testing dashboard connection",
     action_type="session_start",
     detail="test_connection.py health check",
-    integrations={},
 )
 
 if result and result.get("ok"):

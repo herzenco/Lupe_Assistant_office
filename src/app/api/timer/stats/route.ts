@@ -4,7 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const now = new Date()
+  const asOf = new Date()
+  const now = asOf
 
   const todayStart = new Date(now)
   todayStart.setHours(0, 0, 0, 0)
@@ -63,6 +64,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
+    asOf: asOf.toISOString(),
     projects: Object.entries(projectStats).map(([project, times]) => ({
       project,
       ...times,

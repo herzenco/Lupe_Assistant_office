@@ -3,6 +3,35 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+const INTEGRATION_KEYS = [
+  'clickup',
+  'github',
+  'google_calendar',
+  'google_drive',
+  'telegram',
+]
+
+type IntegrationStatus = {
+  status: string
+  last_checked?: string
+}
+
+function normalizeIntegrations(health: Record<string, unknown> | null): Record<string, IntegrationStatus> {
+  const raw = health?.integrations
+  const integrations: Record<string, IntegrationStatus> =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? { ...(raw as Record<string, IntegrationStatus>) }
+      : {}
+
+  for (const key of INTEGRATION_KEYS) {
+    if (!integrations[key]) {
+      integrations[key] = { status: 'unknown' }
+    }
+  }
+
+  return integrations
+}
+
 export async function GET() {
   const [healthRes, heartbeatRes] = await Promise.all([
     supabaseAdmin
@@ -25,6 +54,11 @@ export async function GET() {
 
   const lastHeartbeat = heartbeatRes.data
   const health = healthRes.data
+    ? {
+        ...healthRes.data,
+        integrations: normalizeIntegrations(healthRes.data),
+      }
+    : null
 
   // Calculate uptime from last session_start heartbeat
   let uptime_seconds: number | null = null

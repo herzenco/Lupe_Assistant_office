@@ -13,7 +13,7 @@ from pathlib import Path
 import psutil
 import requests
 
-BASE_URL = os.environ.get("LUPE_DASHBOARD_URL", "http://localhost:3001")
+BASE_URL = os.environ.get("LUPE_DASHBOARD_URL", "http://localhost:3000")
 API_KEY = os.environ.get("LUPE_DASHBOARD_KEY", "")
 QUEUE_FILE = Path.home() / ".openclaw" / "workspace" / "dashboard-queue.jsonl"
 TIMEOUT = 5
@@ -82,12 +82,36 @@ def _system_metrics():
     """Collect CPU, RAM, disk usage via psutil."""
     try:
         return {
-            "cpu_pct": psutil.cpu_percent(interval=0.1),
+            "cpu_pct": psutil.cpu_percent(interval=0.5),
             "ram_pct": psutil.virtual_memory().percent,
             "disk_pct": psutil.disk_usage("/").percent,
         }
     except Exception:
         return {}
+
+
+def _current_model():
+    """Return the model name provided by the running agent environment."""
+    for name in (
+        "LUPE_MODEL",
+        "CODEX_MODEL",
+        "CLAUDE_MODEL",
+        "ANTHROPIC_MODEL",
+        "OPENAI_MODEL",
+        "MODEL",
+    ):
+        value = os.environ.get(name)
+        if value:
+            return value
+    return None
+
+
+def _load_integration_checks():
+    try:
+        from .integration_checks import get_all
+    except ImportError:
+        from integration_checks import get_all
+    return get_all
 
 
 def heartbeat(
@@ -98,17 +122,15 @@ def heartbeat(
     tokens_in=None,
     tokens_out=None,
     cost_usd=None,
-    model="claude-sonnet-4-6",
+    model=None,
     session_type="main",
     integrations=None,
 ):
     """Push a heartbeat to the dashboard. Collects system metrics automatically."""
-    from integration_checks import get_all
-
     payload = {
         "status": status,
         "session_type": session_type,
-        "model": model,
+        "model": model or _current_model(),
     }
 
     if task is not None:
@@ -132,9 +154,17 @@ def heartbeat(
         payload["integrations"] = integrations
     else:
         try:
+            get_all = _load_integration_checks()
             payload["integrations"] = get_all()
         except Exception:
             pass
+
+    google_drive = payload.get("integrations", {}).get("google_drive", {})
+    telegram = payload.get("integrations", {}).get("telegram", {})
+    if google_drive.get("status"):
+        payload["drive_status"] = google_drive["status"]
+    if telegram.get("status"):
+        payload["gateway_status"] = telegram["status"]
 
     return _post("/api/heartbeat", payload)
 
