@@ -86,6 +86,9 @@ CREATE TRIGGER tasks_updated_at
 CREATE TABLE system_health (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   timestamp timestamptz NOT NULL DEFAULT now(),
+  machine_id text,
+  agent_name text,
+  hostname text,
   cpu_pct numeric(5,2),
   ram_pct numeric(5,2),
   disk_pct numeric(5,2),

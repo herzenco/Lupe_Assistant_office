@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
     status, session_type, model, task, action_type, detail,
     tokens_in, tokens_out, cost_usd,
     cpu_pct, ram_pct, disk_pct, gateway_status, drive_status, integrations,
+    machine_id, agent_name, hostname,
   } = body
 
   // Insert heartbeat
@@ -30,11 +31,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: hbErr.message }, { status: 500 })
   }
 
-  // Upsert system health if machine metrics present
-  if (cpu_pct !== undefined || ram_pct !== undefined || disk_pct !== undefined) {
+  // Record system health when Lupe sends either machine metrics or integration status.
+  if (
+    cpu_pct !== undefined
+    || ram_pct !== undefined
+    || disk_pct !== undefined
+    || integrations !== undefined
+    || machine_id !== undefined
+  ) {
     await supabaseAdmin
       .from('system_health')
       .insert({
+        machine_id: machine_id || hostname || 'unknown',
+        agent_name: agent_name || machine_id || hostname || 'Lupe',
+        hostname: hostname || null,
         cpu_pct,
         ram_pct,
         disk_pct,

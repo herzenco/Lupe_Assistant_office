@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -14,6 +14,8 @@ const INTEGRATION_KEYS = [
 type IntegrationStatus = {
   status: string
   last_checked?: string
+  reason?: string
+  path?: string
 }
 
 function normalizeIntegrations(health: Record<string, unknown> | null): Record<string, IntegrationStatus> {
@@ -25,21 +27,31 @@ function normalizeIntegrations(health: Record<string, unknown> | null): Record<s
 
   for (const key of INTEGRATION_KEYS) {
     if (!integrations[key]) {
-      integrations[key] = { status: 'unknown' }
+      integrations[key] = { status: 'unknown', reason: 'No status reported by Lupe yet' }
     }
   }
 
   return integrations
 }
 
-export async function GET() {
-  const [healthRes, heartbeatRes] = await Promise.all([
-    supabaseAdmin
+export async function GET(request: NextRequest) {
+  const preferredMachineId =
+    request.nextUrl.searchParams.get('machine_id')
+    || process.env.LUPE_HEALTH_MACHINE_ID
+    || null
+
+  let healthQuery = supabaseAdmin
       .from('system_health')
       .select('*')
       .order('timestamp', { ascending: false })
       .limit(1)
-      .maybeSingle(),
+
+  if (preferredMachineId) {
+    healthQuery = healthQuery.eq('machine_id', preferredMachineId)
+  }
+
+  const [healthRes, heartbeatRes] = await Promise.all([
+    healthQuery.maybeSingle(),
     supabaseAdmin
       .from('heartbeats')
       .select('*')

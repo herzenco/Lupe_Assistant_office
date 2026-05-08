@@ -65,12 +65,15 @@ export interface Task {
 export interface SystemHealth {
   id: string
   timestamp: string
+  machine_id: string | null
+  agent_name: string | null
+  hostname: string | null
   cpu_pct: number | null
   ram_pct: number | null
   disk_pct: number | null
   gateway_status: 'up' | 'down' | 'unknown'
   drive_status: 'up' | 'down' | 'unknown'
-  integrations: Record<string, { status: 'up' | 'down'; last_checked: string }>
+  integrations: Record<string, { status: 'up' | 'down' | 'unknown'; last_checked?: string; reason?: string; path?: string }>
 }
 
 export interface Action {
