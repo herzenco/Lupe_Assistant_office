@@ -2,7 +2,18 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="$ROOT_DIR/lupe.env"
+ENV_FILE="${LUPE_ENV_FILE:-$ROOT_DIR/lupe.env}"
+SECRETS_FILE="${LUPE_SECRETS_FILE:-${OPENCLAW_SECRETS_FILE:-$HOME/.openclaw/.env.secrets}}"
+
+load_env_file() {
+  local file="$1"
+  if [[ -f "$file" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$file"
+    set +a
+  fi
+}
 
 cd "$ROOT_DIR"
 
@@ -12,13 +23,22 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-set -a
-source "$ENV_FILE"
-set +a
+load_env_file "$ENV_FILE"
+load_env_file "$SECRETS_FILE"
 
 if [[ -z "${LUPE_DASHBOARD_KEY:-}" || "$LUPE_DASHBOARD_KEY" == "paste-dashboard-api-key-here" ]]; then
   echo "Set LUPE_DASHBOARD_KEY in lupe.env before launching Lupe."
   exit 1
+fi
+
+if [[ -z "${LUPE_API_TOKEN:-}" ]]; then
+  echo "Warning: LUPE_API_TOKEN is not set. Xyren content approvals will fail before reaching the API."
+  echo "Add LUPE_API_TOKEN to lupe.env or $SECRETS_FILE for cron/non-interactive OpenClaw runs."
+fi
+
+if [[ "${LUPE_OPENCLAW_DRY_RUN:-}" == "1" ]]; then
+  echo "OpenClaw launcher dry run complete."
+  exit 0
 fi
 
 echo "Testing dashboard connection..."

@@ -45,6 +45,9 @@ Fill in `LUPE_DASHBOARD_KEY` in `lupe.env`, then launch OpenClaw through the das
 ```
 
 That script loads `lupe.env`, verifies the dashboard connection, sends a startup heartbeat, flushes any queued dashboard events, then starts `openclaw`.
+It also loads `$HOME/.openclaw/.env.secrets` when present, or the path in `LUPE_SECRETS_FILE` / `OPENCLAW_SECRETS_FILE`.
+
+For Xyren content approvals, set `LUPE_API_TOKEN` in `lupe.env` or the OpenClaw secrets file. Without it, Lupe can still start, but content approval calls to `https://www.xyren.me/api/agent/content` will fail before the API can authenticate them.
 
 By default it starts `openclaw tui`. To launch a different OpenClaw command, either pass it through:
 
