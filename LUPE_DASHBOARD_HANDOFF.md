@@ -200,6 +200,18 @@ After deployment:
 4. Confirm `/api/reports?days=1&limit=50` returns the report.
 5. Confirm Lupe's queued dashboard events still flush with `client/flush_queue.py`.
 
+## Handoff Maintenance
+
+This repo now includes a local skill for keeping this document current:
+
+```text
+skills/update-lupe-dashboard-handoff/SKILL.md
+```
+
+Before every push, use that skill to decide whether this handoff needs an update. Update this document whenever changes affect dashboard behavior, Lupe jobs, API contracts, Supabase migrations/schema, environment variable names, client helpers, deployment steps, or verification steps.
+
+Do not write secret values, tokens, service-role keys, PINs, or passwords into this handoff.
+
 ## Notes
 
 The old timer API still exists for now, but the dashboard no longer displays project time tracking. Future cleanup can remove timer UI/routes/schema after confirming no active workflow still depends on them.
