@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { signJWT, checkPassword } from '@/lib/auth'
+import { signJWT, checkPin } from '@/lib/auth'
+import { hasSupabaseConfig, supabaseAdmin } from '@/lib/supabase'
 
 const WINDOW_MS = 15 * 60 * 1000
 const MAX_ATTEMPTS = 5
-const attempts = new Map<string, { count: number; resetAt: number }>()
+
+interface LoginAttempt {
+  count: number
+  reset_at: string
+}
 
 export async function POST(request: NextRequest) {
-  const { password } = await request.json()
+  const { pin, password } = await request.json()
+  const submittedPin = typeof pin === 'string' ? pin : password
   const clientKey = getClientKey(request)
-  const retryAfter = getRetryAfterSeconds(clientKey)
+  const retryAfter = await getRetryAfterSeconds(clientKey)
 
   if (retryAfter > 0) {
     return NextResponse.json(
@@ -17,12 +23,12 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  if (!password || !checkPassword(password)) {
-    recordFailedAttempt(clientKey)
-    return NextResponse.json({ error: 'Invalid password' }, { status: 401 })
+  if (!submittedPin || !checkPin(submittedPin)) {
+    await recordFailedAttempt(clientKey)
+    return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
   }
 
-  attempts.delete(clientKey)
+  await clearFailedAttempts(clientKey)
   const token = await signJWT({ user: 'herzen', role: 'admin' })
 
   const response = NextResponse.json({ ok: true })
@@ -42,30 +48,79 @@ function getClientKey(request: NextRequest): string {
   return forwardedFor || request.headers.get('x-real-ip') || 'unknown'
 }
 
-function getRetryAfterSeconds(key: string): number {
+async function getRetryAfterSeconds(key: string): Promise<number> {
+  if (!hasSupabaseConfig()) return 0
+
   const now = Date.now()
-  const entry = attempts.get(key)
+  const { data, error } = await supabaseAdmin
+    .from('login_attempts')
+    .select('count, reset_at')
+    .eq('client_key', key)
+    .maybeSingle<LoginAttempt>()
 
-  if (!entry || entry.resetAt <= now) {
-    attempts.delete(key)
+  if (error) {
+    console.error('Failed to read login attempts:', error.message)
     return 0
   }
 
-  if (entry.count < MAX_ATTEMPTS) {
+  if (!data) return 0
+
+  const resetAt = new Date(data.reset_at).getTime()
+  if (resetAt <= now) {
+    await clearFailedAttempts(key)
     return 0
   }
 
-  return Math.ceil((entry.resetAt - now) / 1000)
+  if (data.count < MAX_ATTEMPTS) {
+    return 0
+  }
+
+  return Math.ceil((resetAt - now) / 1000)
 }
 
-function recordFailedAttempt(key: string) {
-  const now = Date.now()
-  const entry = attempts.get(key)
+async function recordFailedAttempt(key: string) {
+  if (!hasSupabaseConfig()) return
 
-  if (!entry || entry.resetAt <= now) {
-    attempts.set(key, { count: 1, resetAt: now + WINDOW_MS })
+  const now = Date.now()
+  const resetAt = new Date(now + WINDOW_MS).toISOString()
+  const { data: existing, error: readError } = await supabaseAdmin
+    .from('login_attempts')
+    .select('count, reset_at')
+    .eq('client_key', key)
+    .maybeSingle<LoginAttempt>()
+
+  if (readError) {
+    console.error('Failed to read login attempts:', readError.message)
     return
   }
 
-  attempts.set(key, { ...entry, count: entry.count + 1 })
+  const existingResetAt = existing ? new Date(existing.reset_at).getTime() : 0
+  const count = !existing || existingResetAt <= now ? 1 : existing.count + 1
+  const nextResetAt = !existing || existingResetAt <= now ? resetAt : existing.reset_at
+
+  const { error } = await supabaseAdmin
+    .from('login_attempts')
+    .upsert({
+      client_key: key,
+      count,
+      reset_at: nextResetAt,
+      updated_at: new Date(now).toISOString(),
+    })
+
+  if (error) {
+    console.error('Failed to record login attempt:', error.message)
+  }
+}
+
+async function clearFailedAttempts(key: string) {
+  if (!hasSupabaseConfig()) return
+
+  const { error } = await supabaseAdmin
+    .from('login_attempts')
+    .delete()
+    .eq('client_key', key)
+
+  if (error) {
+    console.error('Failed to clear login attempts:', error.message)
+  }
 }

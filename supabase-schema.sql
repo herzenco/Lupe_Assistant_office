@@ -55,7 +55,7 @@ CREATE TABLE tasks (
   title text NOT NULL,
   description text DEFAULT '',
   priority text NOT NULL DEFAULT 'normal' CHECK (priority IN ('urgent', 'high', 'normal', 'low')),
-  project_tag text CHECK (project_tag IN ('Xelerate', 'Xyren', 'ProntoBooks', 'Herzen Co.', 'Skydeo', 'Family Office', 'Xcaret')),
+  project_tag text,
   due_date date,
   complexity text DEFAULT 'medium' CHECK (complexity IN ('light', 'medium', 'heavy')),
   status text NOT NULL DEFAULT 'inbox' CHECK (status IN ('inbox', 'in_progress', 'blocked', 'review', 'complete')),
@@ -109,7 +109,7 @@ CREATE TABLE actions (
     'error_logged', 'other'
   )),
   summary text NOT NULL,
-  project_tag text CHECK (project_tag IN ('Xelerate', 'Xyren', 'ProntoBooks', 'Herzen Co.', 'Skydeo', 'Family Office', 'Xcaret')),
+  project_tag text,
   session_id text,
   timestamp timestamptz NOT NULL DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now()
@@ -157,6 +157,20 @@ INSERT INTO projects (name, slug) VALUES
   ('Family Office', 'family-office'),
   ('Brain', 'brain');
 
+-- Project files: tracked file inventory by project
+CREATE TABLE project_files (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  project text NOT NULL,
+  filename text NOT NULL,
+  file_type text,
+  path text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_project_files_project ON project_files(project);
+
+ALTER TABLE project_files ENABLE ROW LEVEL SECURITY;
+
 -- Timer sessions: project time tracking (supports multiple parallel timers)
 CREATE TABLE timer_sessions (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -190,6 +204,37 @@ CREATE INDEX idx_cron_runs_ran_at ON cron_runs(ran_at DESC);
 CREATE INDEX idx_cron_runs_status ON cron_runs(status);
 
 ALTER TABLE cron_runs ENABLE ROW LEVEL SECURITY;
+
+-- Work reports: hourly/daily reports from Lupe, file intake, Document Dump, Codex, and Claude
+CREATE TABLE work_reports (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  source text NOT NULL CHECK (source IN ('lupe_tasks', 'lupe_folder', 'document_dump', 'codex', 'claude')),
+  title text NOT NULL,
+  summary text,
+  details jsonb NOT NULL DEFAULT '{}'::jsonb,
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_work_reports_source_occurred
+  ON work_reports(source, occurred_at DESC);
+
+CREATE INDEX idx_work_reports_occurred
+  ON work_reports(occurred_at DESC);
+
+ALTER TABLE work_reports ENABLE ROW LEVEL SECURITY;
+
+-- Login attempts: durable dashboard auth rate limiting
+CREATE TABLE login_attempts (
+  client_key text PRIMARY KEY,
+  count integer NOT NULL DEFAULT 0,
+  reset_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_login_attempts_reset_at ON login_attempts(reset_at);
+
+ALTER TABLE login_attempts ENABLE ROW LEVEL SECURITY;
 
 -- RLS enabled but no policies — service role key bypasses RLS
 ALTER TABLE heartbeats ENABLE ROW LEVEL SECURITY;

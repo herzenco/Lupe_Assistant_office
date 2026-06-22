@@ -86,6 +86,18 @@ export interface Action {
   created_at: string
 }
 
+export type WorkReportSource = 'lupe_tasks' | 'lupe_folder' | 'document_dump' | 'codex' | 'claude'
+
+export interface WorkReport {
+  id: string
+  source: WorkReportSource
+  title: string
+  summary: string | null
+  details: Record<string, unknown>
+  occurred_at: string
+  created_at: string
+}
+
 export interface TimerSession {
   id: string
   project: string
