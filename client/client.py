@@ -45,6 +45,11 @@ def _enqueue(endpoint, payload):
         pass  # Last resort — nothing we can do
 
 
+def _should_enqueue_http_error(status):
+    """Only retry transient HTTP failures."""
+    return status == 429 or status >= 500
+
+
 def _post(endpoint, payload):
     """Fire-and-forget POST. Queue on failure."""
     data = json.dumps(payload).encode("utf-8")
@@ -59,7 +64,8 @@ def _post(endpoint, payload):
             body = response.read().decode("utf-8")
             return json.loads(body) if body else None
     except urllib.error.HTTPError as error:
-        _enqueue(endpoint, payload)
+        if _should_enqueue_http_error(error.code):
+            _enqueue(endpoint, payload)
         try:
             body = error.read().decode("utf-8")
             return json.loads(body) if body else None
@@ -249,6 +255,22 @@ def log_session(
     return _post("/api/session", payload)
 
 
+def log_work_report(source, title, summary=None, details=None, occurred_at=None):
+    """Log a work report for Lupe, file intake, Document Dump, Codex, or Claude activity."""
+    payload = {
+        "source": source,
+        "title": title,
+    }
+    if summary is not None:
+        payload["summary"] = summary
+    if details is not None:
+        payload["details"] = details
+    if occurred_at is not None:
+        payload["occurred_at"] = occurred_at
+
+    return _post("/api/reports", payload)
+
+
 def get_tasks(status=None, project_tag=None, priority=None):
     """Poll for tasks from the dashboard."""
     params = {}
@@ -285,8 +307,9 @@ def update_task(task_id, status=None, add_note=None):
         with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
             body = response.read().decode("utf-8")
             return json.loads(body) if body else None
-    except urllib.error.HTTPError:
-        _enqueue(f"/api/tasks/{task_id}", payload)
+    except urllib.error.HTTPError as error:
+        if _should_enqueue_http_error(error.code):
+            _enqueue(f"/api/tasks/{task_id}", payload)
         return None
     except Exception:
         _enqueue(f"/api/tasks/{task_id}", payload)
