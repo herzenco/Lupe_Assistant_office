@@ -205,10 +205,10 @@ CREATE INDEX idx_cron_runs_status ON cron_runs(status);
 
 ALTER TABLE cron_runs ENABLE ROW LEVEL SECURITY;
 
--- Work reports: hourly/daily reports from Lupe, file intake, Document Dump, Codex, and Claude
+-- Work reports: hourly/daily reports from Lupe, file intake, Document Dump, Codex, investments, and Claude
 CREATE TABLE work_reports (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  source text NOT NULL CHECK (source IN ('lupe_tasks', 'lupe_folder', 'document_dump', 'codex', 'claude')),
+  source text NOT NULL CHECK (source IN ('lupe_tasks', 'lupe_folder', 'document_dump', 'codex', 'investments', 'claude')),
   title text NOT NULL,
   summary text,
   details jsonb NOT NULL DEFAULT '{}'::jsonb,

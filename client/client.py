@@ -256,7 +256,7 @@ def log_session(
 
 
 def log_work_report(source, title, summary=None, details=None, occurred_at=None):
-    """Log a work report for Lupe, file intake, Document Dump, Codex, or Claude activity."""
+    """Log a work report for Lupe, file intake, investments, Codex, Claude, or Document Dump activity."""
     payload = {
         "source": source,
         "title": title,

@@ -86,7 +86,7 @@ export interface Action {
   created_at: string
 }
 
-export type WorkReportSource = 'lupe_tasks' | 'lupe_folder' | 'document_dump' | 'codex' | 'claude'
+export type WorkReportSource = 'lupe_tasks' | 'lupe_folder' | 'document_dump' | 'codex' | 'investments' | 'claude'
 
 export interface WorkReport {
   id: string

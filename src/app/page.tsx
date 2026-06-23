@@ -17,6 +17,7 @@ import {
   FileText,
   FolderOpen,
   Heart,
+  Landmark,
   LayoutList,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -63,6 +64,7 @@ const REPORT_SOURCES: Array<{
   { source: 'lupe_folder', label: 'Lupe Folder', helper: 'New files added', icon: FolderOpen, color: '#14b8a6' },
   { source: 'document_dump', label: 'Document Dump', helper: 'New files and categories', icon: Archive, color: '#f59e0b' },
   { source: 'codex', label: 'Codex Work', helper: 'Your Codex sessions', icon: Code2, color: '#3b82f6' },
+  { source: 'investments', label: 'Investments', helper: 'Investment folder reports', icon: Landmark, color: '#22c55e' },
   { source: 'claude', label: 'Claude Work', helper: 'Your Claude sessions', icon: Brain, color: '#8b5cf6' },
 ]
 
@@ -73,6 +75,30 @@ function getDetailCount(details: Record<string, unknown>, keys: string[]) {
     if (Array.isArray(value)) return value.length
   }
   return null
+}
+
+function getNumericDetail(details: Record<string, unknown>, key: string) {
+  const value = details[key]
+  return typeof value === 'number' ? value : null
+}
+
+function getReportFiles(details: Record<string, unknown>) {
+  const files = details.files
+  if (!Array.isArray(files)) return []
+
+  return files.flatMap(file => {
+    if (!file || typeof file !== 'object') return []
+    const item = file as Record<string, unknown>
+    const name = typeof item.name === 'string' ? item.name : null
+    if (!name) return []
+
+    return [{
+      name,
+      type: typeof item.type === 'string' ? item.type : null,
+      category: typeof item.category === 'string' ? item.category : null,
+      summary: typeof item.summary === 'string' ? item.summary : null,
+    }]
+  })
 }
 
 export default function Dashboard() {
@@ -155,6 +181,11 @@ export default function Dashboard() {
       return acc
     }, {} as Record<WorkReportSource, WorkReport[]>)
   }, [reports])
+  const investmentReports = reportsBySource.investments || []
+  const latestInvestmentReport = investmentReports[0]
+  const investmentFiles = latestInvestmentReport ? getReportFiles(latestInvestmentReport.details) : []
+  const investmentAdded = latestInvestmentReport ? getNumericDetail(latestInvestmentReport.details, 'added') : null
+  const investmentChanged = latestInvestmentReport ? getNumericDetail(latestInvestmentReport.details, 'changed') : null
 
   return (
     <div>
@@ -208,7 +239,7 @@ export default function Dashboard() {
           <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Today&apos;s Work Reports</h3>
           <span className="text-xs text-zinc-500">{reports.length} reports</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
           {REPORT_SOURCES.map(({ source, label, helper, icon: Icon, color }) => {
             const sourceReports = reportsBySource[source] || []
             const latestReport = sourceReports[0]
@@ -240,6 +271,57 @@ export default function Dashboard() {
               </div>
             )
           })}
+        </div>
+      </section>
+
+      <section className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+            <Landmark size={14} />
+            Investments
+          </h3>
+          <span className="text-xs text-zinc-500">{investmentReports.length} reports today</span>
+        </div>
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+          {!latestInvestmentReport ? (
+            <p className="text-sm text-zinc-500">Waiting for Lupe&apos;s first Investment folder report</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">{latestInvestmentReport.title}</p>
+                  {latestInvestmentReport.summary && (
+                    <p className="text-sm text-zinc-400 mt-1">{latestInvestmentReport.summary}</p>
+                  )}
+                  <p className="text-xs text-zinc-500 mt-2">
+                    {formatDistanceToNow(new Date(latestInvestmentReport.occurred_at), { addSuffix: true })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-400 flex-shrink-0">
+                  {investmentAdded !== null && <span className="px-2 py-1 rounded bg-zinc-800">{investmentAdded} added</span>}
+                  {investmentChanged !== null && <span className="px-2 py-1 rounded bg-zinc-800">{investmentChanged} changed</span>}
+                </div>
+              </div>
+
+              {investmentFiles.length > 0 && (
+                <div className="divide-y divide-zinc-800">
+                  {investmentFiles.slice(0, 4).map(file => (
+                    <div key={`${latestInvestmentReport.id}-${file.name}`} className="py-2 first:pt-0 last:pb-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText size={13} className="text-zinc-500 flex-shrink-0" />
+                        <span className="text-sm text-zinc-200 truncate">{file.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
+                        {file.category && <span>{file.category}</span>}
+                        {file.type && <span>{file.type}</span>}
+                      </div>
+                      {file.summary && <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{file.summary}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

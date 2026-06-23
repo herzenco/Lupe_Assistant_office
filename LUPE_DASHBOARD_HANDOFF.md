@@ -4,12 +4,13 @@
 
 The dashboard now tracks work reports instead of time spent per project.
 
-The main dashboard shows five daily report streams:
+The main dashboard shows six daily report streams:
 
 - `lupe_tasks` - what Lupe worked on throughout the day
 - `lupe_folder` - new files added to the Lupe Folder
 - `document_dump` - new files added to Document Dump and how Lupe categorized them
 - `codex` - what Herzen worked on with Codex
+- `investments` - what Lupe found in the Investment folder
 - `claude` - what Herzen worked on with Claude
 
 The login flow now uses a PIN. Configure `LOGIN_PIN` in local and deployment environments. `LOGIN_PASSWORD` still works as a temporary fallback, but should be removed after deployment is confirmed.
@@ -20,11 +21,12 @@ Run these Supabase migrations before deploying the new dashboard:
 
 1. `migrations/007_login_attempts.sql`
 2. `migrations/008_work_reports.sql`
+3. `migrations/009_investment_work_reports.sql`
 
 The migrations add:
 
 - `login_attempts` for durable dashboard login rate limiting
-- `work_reports` for Lupe/Codex/Claude/file-intake activity reports
+- `work_reports` for Lupe/Codex/Claude/investment/file-intake activity reports
 
 Required dashboard environment variables:
 
@@ -75,6 +77,7 @@ Valid `source` values:
 - `lupe_folder`
 - `document_dump`
 - `codex`
+- `investments`
 - `claude`
 
 ## Lupe Client Helper
@@ -187,6 +190,32 @@ Recommended details:
   "projects": ["Xyren"],
   "outputs": ["Draft outline"],
   "count": 1
+}
+```
+
+### 6. Investment Folder Report
+
+Watch/read the Investment folder and report new or changed files, plus Lupe's plain-English summary of what each item appears to be. This should report folder contents only; do not include account passwords, brokerage login details, full account numbers, or other secrets.
+
+Source: `investments`
+
+Recommended details:
+
+```json
+{
+  "files": [
+    {
+      "name": "brokerage-statement.pdf",
+      "path": "/path/to/Investment/brokerage-statement.pdf",
+      "type": "pdf",
+      "category": "statement",
+      "summary": "Monthly brokerage statement",
+      "sensitive": true
+    }
+  ],
+  "categories": ["statement"],
+  "added": 1,
+  "changed": 0
 }
 ```
 
