@@ -198,6 +198,17 @@ Watch/read the Investment folder and report new or changed files, latest trades,
 
 Source: `investments`
 
+The dashboard Investments panel reads directly from `details.trades` and `details.positions`. Do not send a connectivity-only or auth-check report as the final dashboard report. Every scheduled investment run should include:
+
+- `details.positions` as an array of current open positions
+- `details.trades` as an array of new executed trades since the prior Desktop report
+- If there are no new trades, include the latest visible same-day executed trades/fills and set `new_trade_count` to `0`
+- `details.open_orders` and `details.stops` when broker stops or open orders are visible
+- `details.account` with cash, buying power, equity/portfolio value, and capture time when available
+- `details.report_path` pointing to the canonical Desktop Markdown report
+
+For local testing, set `LUPE_DASHBOARD_URL=http://localhost:3000` so Codex automations post to the dashboard being viewed locally. For production, set `LUPE_DASHBOARD_URL` to the deployed dashboard URL. In both cases, `DASHBOARD_API_KEY` must match the dashboard environment.
+
 Recommended details:
 
 ```json
@@ -228,11 +239,34 @@ Recommended details:
       "ticker": "AAPL",
       "shares": 5,
       "average_cost": 210.25,
+      "market_value": 1051.25,
+      "unrealized_pnl": 0,
       "status": "Open starter position"
     }
   ],
+  "open_orders": [
+    {
+      "ticker": "AAPL",
+      "side": "sell",
+      "type": "stop-market",
+      "quantity": 5,
+      "stop_price": 199.5,
+      "state": "confirmed",
+      "time_in_force": "gtc",
+      "created_at": "2026-06-23T14:35:00.000Z"
+    }
+  ],
+  "account": {
+    "cash": 500,
+    "buying_power": 500,
+    "portfolio_value": 1551.25,
+    "captured_at": "2026-06-23T14:35:00.000Z"
+  },
+  "report_path": "/Users/herzen/Desktop/Lupe/Codex Work/Investment/investment_2026-06-23.md",
+  "source_agent": "codex",
   "added": 1,
-  "changed": 0
+  "changed": 0,
+  "new_trade_count": 1
 }
 ```
 
