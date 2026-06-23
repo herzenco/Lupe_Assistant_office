@@ -3,6 +3,7 @@ export const WORK_REPORT_SOURCES = [
   'lupe_folder',
   'document_dump',
   'codex',
+  'investments',
   'claude',
 ] as const
 

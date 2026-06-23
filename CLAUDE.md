@@ -41,9 +41,14 @@ Next.js 15 (App Router, TypeScript) dashboard for monitoring and managing Lupe, 
 | `/api/auth/me` | GET | Dashboard session check |
 
 ## Environment Variables
-See `.env.example`. Required: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `LOGIN_PASSWORD`, `DASHBOARD_API_KEY`.
+See `.env.example`. Required: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `LOGIN_PIN`, `DASHBOARD_API_KEY`.
 
 ## Commands
 - `npm run dev` — development server
 - `npm run build` — production build
 - `npm run lint` — ESLint
+
+## Handoff Maintenance
+- Before every push, use `skills/update-lupe-dashboard-handoff/SKILL.md`.
+- Update `LUPE_DASHBOARD_HANDOFF.md` whenever dashboard behavior, Lupe jobs, API contracts, Supabase migrations/schema, environment variable names, client helpers, deployment steps, or verification steps change.
+- Do not include secret values in the handoff.

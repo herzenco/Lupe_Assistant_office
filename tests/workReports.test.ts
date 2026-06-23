@@ -26,3 +26,23 @@ test('normalizeWorkReportInput rejects unknown sources', () => {
     title: 'Tracked time',
   }), /source must be one of/)
 })
+
+test('normalizeWorkReportInput accepts investment folder reports', () => {
+  const report = normalizeWorkReportInput({
+    source: 'investments',
+    title: 'Investment folder update',
+    details: {
+      files: ['brokerage-statement.pdf', 'portfolio-notes.md'],
+      added: 2,
+      categories: ['statements', 'notes'],
+    },
+  })
+
+  assert.equal(report.source, 'investments')
+  assert.equal(report.title, 'Investment folder update')
+  assert.deepEqual(report.details, {
+    files: ['brokerage-statement.pdf', 'portfolio-notes.md'],
+    added: 2,
+    categories: ['statements', 'notes'],
+  })
+})
