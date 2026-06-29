@@ -15,7 +15,6 @@ import {
   Code2,
   Cpu,
   FileText,
-  FolderOpen,
   Heart,
   Landmark,
   LayoutList,
@@ -53,23 +52,182 @@ const STATUS_CONFIG = {
   error: { color: 'bg-red-500', label: 'Error', ring: 'ring-red-500/30', text: 'text-red-400' },
 }
 
-const REPORT_SOURCES: Array<{
+const REPORT_SOURCE_CONFIG: Array<{
   source: WorkReportSource
   label: string
   helper: string
   icon: React.ComponentType<{ size?: number; className?: string }>
   color: string
 }> = [
-  { source: 'lupe_tasks', label: 'Lupe Tasks', helper: 'Hourly work summary', icon: Bot, color: '#6366f1' },
-  { source: 'lupe_folder', label: 'Lupe Folder', helper: 'New files added', icon: FolderOpen, color: '#14b8a6' },
-  { source: 'document_dump', label: 'Document Dump', helper: 'New files and categories', icon: Archive, color: '#f59e0b' },
-  { source: 'codex', label: 'Codex Work', helper: 'Your Codex sessions', icon: Code2, color: '#3b82f6' },
-  { source: 'investments', label: 'Investments', helper: 'Investment folder reports', icon: Landmark, color: '#22c55e' },
-  { source: 'claude', label: 'Claude Work', helper: 'Your Claude sessions', icon: Brain, color: '#8b5cf6' },
+  { source: 'lupe_tasks', label: 'Lupe Tasks', helper: 'What Lupe worked on', icon: Bot, color: '#6366f1' },
+  { source: 'document_dump', label: 'Document Dump', helper: 'Reviewed files and categories', icon: Archive, color: '#f59e0b' },
+  { source: 'codex', label: 'Codex Work', helper: 'Repo and project work', icon: Code2, color: '#3b82f6' },
+  { source: 'claude', label: 'Claude Work', helper: 'Claude sessions and outputs', icon: Brain, color: '#8b5cf6' },
+  { source: 'investments', label: 'Investments', helper: 'Trades and positions', icon: Landmark, color: '#22c55e' },
 ]
 
-function getDetailCount(details: Record<string, unknown>, keys: string[]) {
+const DISPLAY_REPORT_SOURCES = REPORT_SOURCE_CONFIG.map(item => item.source)
+
+type ReportItem = {
+  name: string
+  path: string | null
+  summary: string | null
+  meta: string[]
+}
+
+type TradeItem = {
+  ticker: string
+  side: string | null
+  quantity: string | null
+  price: string | null
+  timestamp: string | null
+  note: string | null
+}
+
+type PositionItem = {
+  ticker: string
+  size: string | null
+  averageCost: string | null
+  note: string | null
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function textFrom(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (typeof value === 'number') return String(value)
+  return null
+}
+
+function formatReportDate(value: string, pattern: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : format(date, pattern)
+}
+
+function firstText(record: Record<string, unknown>, keys: string[]): string | null {
   for (const key of keys) {
+    const value = textFrom(record[key])
+    if (value) return value
+  }
+  return null
+}
+
+function listFrom(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
+}
+
+function appendMeta(meta: string[], label: string, value: string | null) {
+  if (value) meta.push(`${label}: ${value}`)
+}
+
+function getFallbackPath(details: Record<string, unknown>) {
+  return firstText(details, ['path', 'folder', 'project', 'repo', 'repository', 'destination'])
+}
+
+function itemFromString(value: string, details: Record<string, unknown>, summary: string | null): ReportItem {
+  return {
+    name: value,
+    path: getFallbackPath(details),
+    summary,
+    meta: [],
+  }
+}
+
+function fileItem(value: unknown, details: Record<string, unknown>, fallbackSummary: string | null): ReportItem | null {
+  if (typeof value === 'string') return itemFromString(value, details, fallbackSummary)
+  const item = asRecord(value)
+  if (!item) return null
+
+  const meta: string[] = []
+  appendMeta(meta, 'Category', firstText(item, ['category', 'type']))
+  appendMeta(meta, 'Status', firstText(item, ['status']))
+
+  return {
+    name: firstText(item, ['name', 'file', 'filename', 'title']) || 'Untitled item',
+    path: firstText(item, ['path', 'destination', 'folder', 'repo', 'repository', 'project']),
+    summary: firstText(item, ['summary', 'reason', 'note', 'rationale', 'description']) || fallbackSummary,
+    meta,
+  }
+}
+
+function taskItem(value: unknown, details: Record<string, unknown>, fallbackSummary: string | null): ReportItem | null {
+  if (typeof value === 'string') return itemFromString(value, details, fallbackSummary)
+  const item = asRecord(value)
+  if (!item) return null
+
+  const meta: string[] = []
+  appendMeta(meta, 'Status', firstText(item, ['status', 'state']))
+  appendMeta(meta, 'Priority', firstText(item, ['priority']))
+
+  return {
+    name: firstText(item, ['name', 'title', 'task']) || 'Untitled task',
+    path: firstText(item, ['project', 'folder', 'path']),
+    summary: firstText(item, ['summary', 'note', 'description', 'result']) || fallbackSummary,
+    meta,
+  }
+}
+
+function workItem(value: unknown, details: Record<string, unknown>, fallbackSummary: string | null): ReportItem | null {
+  if (typeof value === 'string') return itemFromString(value, details, fallbackSummary)
+  const item = asRecord(value)
+  if (!item) return null
+
+  const meta: string[] = []
+  appendMeta(meta, 'Output', firstText(item, ['output', 'artifact']))
+  appendMeta(meta, 'Status', firstText(item, ['status']))
+
+  return {
+    name: firstText(item, ['name', 'title', 'session', 'project']) || 'Untitled work item',
+    path: firstText(item, ['repo', 'repository', 'folder', 'path', 'project']),
+    summary: firstText(item, ['summary', 'note', 'description', 'result']) || fallbackSummary,
+    meta,
+  }
+}
+
+function getReportItems(report: WorkReport): ReportItem[] {
+  const details = report.details || {}
+  const fallbackSummary = report.summary || report.title
+
+  if (report.source === 'lupe_tasks') {
+    return [
+      ...listFrom(details.tasks).map(item => taskItem(item, details, fallbackSummary)),
+      ...listFrom(details.completed).map(item => taskItem(item, details, fallbackSummary)),
+      ...listFrom(details.blocked).map(item => taskItem(item, details, fallbackSummary)),
+    ].filter((item): item is ReportItem => Boolean(item))
+  }
+
+  if (report.source === 'document_dump') {
+    return [
+      ...listFrom(details.files).map(item => fileItem(item, details, fallbackSummary)),
+      ...listFrom(details.items).map(item => fileItem(item, details, fallbackSummary)),
+    ].filter((item): item is ReportItem => Boolean(item))
+  }
+
+  if (report.source === 'codex' || report.source === 'claude') {
+    return [
+      ...listFrom(details.sessions).map(item => workItem(item, details, fallbackSummary)),
+      ...listFrom(details.items).map(item => workItem(item, details, fallbackSummary)),
+      ...listFrom(details.outputs).map(item => workItem(item, details, fallbackSummary)),
+    ].filter((item): item is ReportItem => Boolean(item))
+  }
+
+  if (report.source === 'investments') {
+    return [
+      ...listFrom(details.files).map(item => fileItem(item, details, fallbackSummary)),
+      ...listFrom(details.items).map(item => fileItem(item, details, fallbackSummary)),
+    ].filter((item): item is ReportItem => Boolean(item))
+  }
+
+  return []
+}
+
+function getDetailCount(report: WorkReport) {
+  const details = report.details
+  for (const key of ['count', 'added', 'files', 'tasks', 'items', 'sessions', 'trades', 'positions']) {
     const value = details[key]
     if (typeof value === 'number') return value
     if (Array.isArray(value)) return value.length
@@ -77,28 +235,208 @@ function getDetailCount(details: Record<string, unknown>, keys: string[]) {
   return null
 }
 
-function getNumericDetail(details: Record<string, unknown>, key: string) {
-  const value = details[key]
-  return typeof value === 'number' ? value : null
+function formatMoney(value: string | null) {
+  if (!value) return null
+  const number = Number(value)
+  if (Number.isFinite(number)) return `$${number.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  return value
 }
 
-function getReportFiles(details: Record<string, unknown>) {
-  const files = details.files
-  if (!Array.isArray(files)) return []
-
-  return files.flatMap(file => {
-    if (!file || typeof file !== 'object') return []
-    const item = file as Record<string, unknown>
-    const name = typeof item.name === 'string' ? item.name : null
-    if (!name) return []
+function getTrades(reports: WorkReport[]): TradeItem[] {
+  return reports.flatMap(report => listFrom(report.details.trades).flatMap(value => {
+    const item = asRecord(value)
+    if (!item) return []
+    const ticker = firstText(item, ['ticker', 'symbol'])
+    if (!ticker) return []
 
     return [{
-      name,
-      type: typeof item.type === 'string' ? item.type : null,
-      category: typeof item.category === 'string' ? item.category : null,
-      summary: typeof item.summary === 'string' ? item.summary : null,
+      ticker,
+      side: firstText(item, ['side', 'action', 'type']),
+      quantity: firstText(item, ['quantity', 'qty', 'shares', 'contracts']),
+      price: formatMoney(firstText(item, ['price', 'fill_price', 'average_price'])),
+      timestamp: firstText(item, ['timestamp', 'date', 'occurred_at']) || report.occurred_at,
+      note: firstText(item, ['rationale', 'note', 'summary']),
     }]
-  })
+  }))
+}
+
+function getPositions(reports: WorkReport[]): PositionItem[] {
+  return reports.flatMap(report => listFrom(report.details.positions).flatMap(value => {
+    const item = asRecord(value)
+    if (!item) return []
+    const ticker = firstText(item, ['ticker', 'symbol'])
+    if (!ticker) return []
+
+    return [{
+      ticker,
+      size: firstText(item, ['shares', 'quantity', 'qty', 'size', 'position_size']),
+      averageCost: formatMoney(firstText(item, ['average_cost', 'avg_cost', 'cost_basis'])),
+      note: firstText(item, ['status', 'note', 'summary']),
+    }]
+  }))
+}
+
+function ReportItemRows({ items }: { items: ReportItem[] }) {
+  if (items.length === 0) return null
+
+  return (
+    <div className="divide-y divide-zinc-800">
+      {items.slice(0, 5).map((item, index) => (
+        <div key={`${item.name}-${index}`} className="py-3 first:pt-0 last:pb-0">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-zinc-100 truncate">{item.name}</p>
+              {item.path && <p className="text-xs text-zinc-500 truncate">{item.path}</p>}
+            </div>
+            {item.meta.length > 0 && (
+              <div className="flex flex-wrap gap-1 sm:justify-end">
+                {item.meta.slice(0, 2).map(meta => (
+                  <span key={meta} className="text-[11px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">{meta}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          {item.summary && <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{item.summary}</p>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function WorkReportSection({
+  config,
+  reports,
+}: {
+  config: typeof REPORT_SOURCE_CONFIG[number]
+  reports: WorkReport[]
+}) {
+  const Icon = config.icon
+
+  return (
+    <section className="mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+          <span style={{ color: config.color }}>
+            <Icon size={14} />
+          </span>
+          {config.label}
+        </h3>
+        <span className="text-xs text-zinc-500">{reports.length} today</span>
+      </div>
+      {!reports.length ? (
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 text-sm text-zinc-500">
+          Waiting for the first {config.label.toLowerCase()} report
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {reports.slice(0, 4).map(report => {
+            const items = getReportItems(report)
+            return (
+              <div key={report.id} className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">{report.title}</p>
+                    {report.summary && <p className="text-sm text-zinc-400 mt-1 line-clamp-2">{report.summary}</p>}
+                  </div>
+                  <span className="text-xs text-zinc-500 flex-shrink-0">
+                    {formatReportDate(report.occurred_at, 'MMM d, HH:mm')}
+                  </span>
+                </div>
+                <ReportItemRows items={items} />
+                {items.length === 0 && (
+                  <p className="text-xs text-zinc-500">
+                    No item-level details were included in this report.
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function InvestmentsSection({ reports }: { reports: WorkReport[] }) {
+  const trades = getTrades(reports)
+  const positions = getPositions(reports)
+
+  return (
+    <section className="mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+          <Landmark size={14} className="text-green-400" />
+          Investments
+        </h3>
+        <span className="text-xs text-zinc-500">{reports.length} reports today</span>
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-white">Latest Trades</p>
+            <span className="text-xs text-zinc-500">{trades.length}</span>
+          </div>
+          {!trades.length ? (
+            <p className="text-sm text-zinc-500">No trades reported yet</p>
+          ) : (
+            <div className="divide-y divide-zinc-800">
+              {trades.slice(0, 6).map((trade, index) => (
+                <div key={`${trade.ticker}-${index}`} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-100">{trade.ticker}</p>
+                      <p className="text-xs text-zinc-500">
+                        {[trade.side, trade.quantity, trade.price].filter(Boolean).join(' | ') || 'Trade'}
+                      </p>
+                    </div>
+                    {trade.timestamp && (
+                      <span className="text-xs text-zinc-500 flex-shrink-0">
+                        {formatReportDate(trade.timestamp, 'MMM d')}
+                      </span>
+                    )}
+                  </div>
+                  {trade.note && <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{trade.note}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-white">Current Positions</p>
+            <span className="text-xs text-zinc-500">{positions.length}</span>
+          </div>
+          {!positions.length ? (
+            <p className="text-sm text-zinc-500">No positions reported yet</p>
+          ) : (
+            <div className="divide-y divide-zinc-800">
+              {positions.slice(0, 6).map((position, index) => (
+                <div key={`${position.ticker}-${index}`} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-100">{position.ticker}</p>
+                      <p className="text-xs text-zinc-500">
+                        {[position.size, position.averageCost && `Avg ${position.averageCost}`].filter(Boolean).join(' | ') || 'Position'}
+                      </p>
+                    </div>
+                  </div>
+                  {position.note && <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{position.note}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <WorkReportSection
+          config={{ source: 'investments', label: 'Investment Notes', helper: 'Folder reports', icon: FileText, color: '#22c55e' }}
+          reports={reports}
+        />
+      </div>
+    </section>
+  )
 }
 
 export default function Dashboard() {
@@ -175,17 +513,16 @@ export default function Dashboard() {
     : 0
 
   const reports = useMemo(() => reportsData?.reports || [], [reportsData?.reports])
+  const visibleReports = useMemo(
+    () => reports.filter(report => DISPLAY_REPORT_SOURCES.includes(report.source)),
+    [reports]
+  )
   const reportsBySource = useMemo(() => {
-    return REPORT_SOURCES.reduce((acc, item) => {
-      acc[item.source] = reports.filter(report => report.source === item.source)
+    return REPORT_SOURCE_CONFIG.reduce((acc, item) => {
+      acc[item.source] = visibleReports.filter(report => report.source === item.source)
       return acc
     }, {} as Record<WorkReportSource, WorkReport[]>)
-  }, [reports])
-  const investmentReports = reportsBySource.investments || []
-  const latestInvestmentReport = investmentReports[0]
-  const investmentFiles = latestInvestmentReport ? getReportFiles(latestInvestmentReport.details) : []
-  const investmentAdded = latestInvestmentReport ? getNumericDetail(latestInvestmentReport.details, 'added') : null
-  const investmentChanged = latestInvestmentReport ? getNumericDetail(latestInvestmentReport.details, 'changed') : null
+  }, [visibleReports])
 
   return (
     <div>
@@ -236,16 +573,14 @@ export default function Dashboard() {
 
       <section className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Today&apos;s Work Reports</h3>
-          <span className="text-xs text-zinc-500">{reports.length} reports</span>
+          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Work Reports Snapshot</h3>
+          <span className="text-xs text-zinc-500">{visibleReports.length} visible reports today</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
-          {REPORT_SOURCES.map(({ source, label, helper, icon: Icon, color }) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+          {REPORT_SOURCE_CONFIG.map(({ source, label, helper, icon: Icon, color }) => {
             const sourceReports = reportsBySource[source] || []
             const latestReport = sourceReports[0]
-            const count = latestReport
-              ? getDetailCount(latestReport.details, ['count', 'added', 'files', 'tasks', 'items'])
-              : null
+            const count = latestReport ? getDetailCount(latestReport) : null
 
             return (
               <div key={source} className="bg-zinc-900 rounded-xl border border-zinc-800 p-4">
@@ -274,56 +609,15 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-            <Landmark size={14} />
-            Investments
-          </h3>
-          <span className="text-xs text-zinc-500">{investmentReports.length} reports today</span>
-        </div>
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
-          {!latestInvestmentReport ? (
-            <p className="text-sm text-zinc-500">Waiting for Lupe&apos;s first Investment folder report</p>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">{latestInvestmentReport.title}</p>
-                  {latestInvestmentReport.summary && (
-                    <p className="text-sm text-zinc-400 mt-1">{latestInvestmentReport.summary}</p>
-                  )}
-                  <p className="text-xs text-zinc-500 mt-2">
-                    {formatDistanceToNow(new Date(latestInvestmentReport.occurred_at), { addSuffix: true })}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-400 flex-shrink-0">
-                  {investmentAdded !== null && <span className="px-2 py-1 rounded bg-zinc-800">{investmentAdded} added</span>}
-                  {investmentChanged !== null && <span className="px-2 py-1 rounded bg-zinc-800">{investmentChanged} changed</span>}
-                </div>
-              </div>
+      {REPORT_SOURCE_CONFIG.filter(config => config.source !== 'investments').map(config => (
+        <WorkReportSection
+          key={config.source}
+          config={config}
+          reports={reportsBySource[config.source] || []}
+        />
+      ))}
 
-              {investmentFiles.length > 0 && (
-                <div className="divide-y divide-zinc-800">
-                  {investmentFiles.slice(0, 4).map(file => (
-                    <div key={`${latestInvestmentReport.id}-${file.name}`} className="py-2 first:pt-0 last:pb-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileText size={13} className="text-zinc-500 flex-shrink-0" />
-                        <span className="text-sm text-zinc-200 truncate">{file.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
-                        {file.category && <span>{file.category}</span>}
-                        {file.type && <span>{file.type}</span>}
-                      </div>
-                      {file.summary && <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{file.summary}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
+      <InvestmentsSection reports={reportsBySource.investments || []} />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <Link href="/tasks" className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 hover:border-zinc-700 transition-colors">
@@ -379,14 +673,14 @@ export default function Dashboard() {
             <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Recent Reports</h3>
             <span className="text-xs text-zinc-500">Last 24 hours</span>
           </div>
-          {!reports.length ? (
+          {!visibleReports.length ? (
             <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 text-center text-zinc-500 text-sm">
               No work reports yet
             </div>
           ) : (
             <div className="space-y-1">
-              {reports.slice(0, 8).map(report => {
-                const config = REPORT_SOURCES.find(item => item.source === report.source) || REPORT_SOURCES[0]
+              {visibleReports.slice(0, 8).map(report => {
+                const config = REPORT_SOURCE_CONFIG.find(item => item.source === report.source) || REPORT_SOURCE_CONFIG[0]
                 return (
                   <div key={report.id} className="flex items-start gap-3 py-2.5 px-3 rounded-lg hover:bg-zinc-900/50">
                     <span className="text-xs text-zinc-600 w-12 flex-shrink-0 font-mono">

@@ -4,14 +4,15 @@
 
 The dashboard now tracks work reports instead of time spent per project.
 
-The main dashboard shows six daily report streams:
+The main dashboard shows five visible daily report streams:
 
 - `lupe_tasks` - what Lupe worked on throughout the day
-- `lupe_folder` - new files added to the Lupe Folder
 - `document_dump` - new files added to Document Dump and how Lupe categorized them
 - `codex` - what Herzen worked on with Codex
 - `investments` - what Lupe found in the Investment folder
 - `claude` - what Herzen worked on with Claude
+
+The API still accepts `lupe_folder` for compatibility, but Lupe Folder is no longer shown as a visible Work Reports section on the dashboard.
 
 The login flow now uses a PIN. Configure `LOGIN_PIN` in local and deployment environments. `LOGIN_PASSWORD` still works as a temporary fallback, but should be removed after deployment is confirmed.
 
@@ -69,7 +70,7 @@ Single report payload:
 }
 ```
 
-Batch payloads are also accepted by sending an array of report objects.
+Batch payloads are also accepted by sending an array of report objects. The dashboard now works best when reports include item-level details in `details`.
 
 Valid `source` values:
 
@@ -107,36 +108,22 @@ Recommended details:
 
 ```json
 {
-  "tasks": ["..."],
-  "completed": ["..."],
-  "blocked": ["..."],
+  "tasks": [
+    {
+      "title": "Review Document Dump intake",
+      "project": "Lupe Office",
+      "status": "complete",
+      "summary": "Reviewed incoming files and flagged invoices for categorization."
+    }
+  ],
+  "completed": ["Updated dashboard report watcher"],
+  "blocked": [],
   "projects": ["Xyren", "Herzen Co."],
   "count": 4
 }
 ```
 
-### 2. Lupe Folder New File Report
-
-Watch the Lupe Folder and report new files.
-
-Source: `lupe_folder`
-
-Recommended details:
-
-```json
-{
-  "files": [
-    {
-      "name": "example.pdf",
-      "path": "/path/to/example.pdf",
-      "type": "pdf"
-    }
-  ],
-  "added": 1
-}
-```
-
-### 3. Document Dump Categorization Report
+### 2. Document Dump Categorization Report
 
 Watch the Document Dump folder and report both new files and Lupe's categorization decisions.
 
@@ -149,9 +136,10 @@ Recommended details:
   "files": [
     {
       "name": "invoice.pdf",
+      "path": "/path/to/Document Dump/invoice.pdf",
       "category": "finance",
       "destination": "Finance/Invoices",
-      "reason": "Invoice from vendor"
+      "summary": "Invoice from vendor. Lupe moved it into Finance/Invoices."
     }
   ],
   "categories": ["finance"],
@@ -159,7 +147,7 @@ Recommended details:
 }
 ```
 
-### 4. Codex Work Report
+### 3. Codex Work Report
 
 Watch/read the Codex activity file on Desktop/Lupe and summarize what Herzen worked on with Codex.
 
@@ -169,14 +157,19 @@ Recommended details:
 
 ```json
 {
-  "sessions": ["Lupe dashboard auth update"],
-  "repos": ["Lupe_Assistant_office"],
+  "sessions": [
+    {
+      "title": "Dashboard Work Reports UI",
+      "repo": "Lupe_Assistant_office",
+      "summary": "Updated dashboard sections and report rendering."
+    }
+  ],
   "files_changed": ["src/app/page.tsx"],
   "count": 1
 }
 ```
 
-### 5. Claude Work Report
+### 4. Claude Work Report
 
 Watch/read the Claude activity file on Desktop/Lupe and summarize what Herzen worked on with Claude.
 
@@ -186,16 +179,22 @@ Recommended details:
 
 ```json
 {
-  "sessions": ["Research and writing support"],
+  "sessions": [
+    {
+      "title": "Research and writing support",
+      "project": "Xyren",
+      "summary": "Prepared draft outline and summarized supporting notes."
+    }
+  ],
   "projects": ["Xyren"],
   "outputs": ["Draft outline"],
   "count": 1
 }
 ```
 
-### 6. Investment Folder Report
+### 5. Investment Folder Report
 
-Watch/read the Investment folder and report new or changed files, plus Lupe's plain-English summary of what each item appears to be. This should report folder contents only; do not include account passwords, brokerage login details, full account numbers, or other secrets.
+Watch/read the Investment folder and report new or changed files, latest trades, and current positions. This should report folder contents only; do not include account passwords, brokerage login details, full account numbers, or other secrets.
 
 Source: `investments`
 
@@ -214,6 +213,24 @@ Recommended details:
     }
   ],
   "categories": ["statement"],
+  "trades": [
+    {
+      "ticker": "AAPL",
+      "side": "buy",
+      "quantity": 5,
+      "price": 210.25,
+      "timestamp": "2026-06-23T14:30:00.000Z",
+      "note": "Opened starter position from brokerage activity file."
+    }
+  ],
+  "positions": [
+    {
+      "ticker": "AAPL",
+      "shares": 5,
+      "average_cost": 210.25,
+      "status": "Open starter position"
+    }
+  ],
   "added": 1,
   "changed": 0
 }
