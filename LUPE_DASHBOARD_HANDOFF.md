@@ -4,6 +4,8 @@
 
 The dashboard now tracks work reports instead of time spent per project.
 
+The dashboard also includes a Content Asset Bridge for Lupe's content approval and Instagram publishing workflow. It registers image assets from an approved shared Lupe folder, creates temporary tokenized public URLs for selected assets, and revokes/expires those public exposures without deleting the source files.
+
 The main dashboard shows five visible daily report streams:
 
 - `lupe_tasks` - what Lupe worked on throughout the day
@@ -23,11 +25,13 @@ Run these Supabase migrations before deploying the new dashboard:
 1. `migrations/007_login_attempts.sql`
 2. `migrations/008_work_reports.sql`
 3. `migrations/009_investment_work_reports.sql`
+4. `migrations/010_content_asset_bridge.sql`
 
 The migrations add:
 
 - `login_attempts` for durable dashboard login rate limiting
 - `work_reports` for Lupe/Codex/Claude/investment/file-intake activity reports
+- `content_assets` and `content_asset_exposures` for local asset registration, temporary public media URLs, and exposure audit cleanup
 
 Required dashboard environment variables:
 
@@ -39,7 +43,65 @@ LOGIN_PIN=...
 DASHBOARD_API_KEY=...
 MONTHLY_BUDGET_USD=150
 LUPE_HEALTH_MACHINE_ID=lupe-main-machine
+CONTENT_ASSET_BASE_DIRS=/path/to/shared/lupe/folder
+CONTENT_ASSET_PUBLIC_BASE_URL=https://public-dashboard-or-tunnel.example
 ```
+
+`CONTENT_ASSET_PUBLIC_BASE_URL` must be reachable by Instagram and must point at a dashboard instance that can read the paths under `CONTENT_ASSET_BASE_DIRS`.
+
+## Content Asset Bridge API
+
+Lupe scripts should register source files that already exist in the shared folder:
+
+```http
+POST /api/content-assets
+Authorization: Bearer $DASHBOARD_API_KEY
+Content-Type: application/json
+```
+
+```json
+{
+  "path": "/path/to/shared/lupe/folder/Content/post.jpg",
+  "tags": ["instagram"],
+  "metadata": {
+    "campaign": "xyren"
+  }
+}
+```
+
+The response returns `{ "ok": true, "asset": { ... } }`. Use `asset.id` to expose the asset:
+
+```http
+POST /api/content-assets/:id/expose
+Authorization: Bearer $DASHBOARD_API_KEY
+Content-Type: application/json
+```
+
+```json
+{
+  "ttl_seconds": 3600,
+  "note": "Instagram publish window",
+  "content_task_id": "approval-123"
+}
+```
+
+The response returns `exposure.public_url`. That URL uses `/public/content-assets/:token`, is unauthenticated, and works only while the exposure is active and unexpired.
+
+After Instagram publish succeeds, Lupe should immediately revoke the exposure:
+
+```http
+POST /api/content-assets/:id/revoke
+Authorization: Bearer $DASHBOARD_API_KEY
+```
+
+Run cleanup from a scheduled job or ad hoc script:
+
+```http
+POST /api/content-assets/cleanup
+Authorization: Bearer $DASHBOARD_API_KEY
+```
+
+Inspection/debugging UI is available at `/content-assets`.
 
 ## Report API
 
