@@ -105,3 +105,33 @@ export interface TimerSession {
   stopped_at: string | null
   duration_seconds: number | null
 }
+
+export interface ContentAsset {
+  id: string
+  absolute_path: string
+  relative_path: string
+  filename: string
+  mime_type: string
+  size_bytes: number
+  sha256: string
+  tags: string[]
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type ContentAssetExposureStatus = 'active' | 'revoked' | 'expired'
+
+export interface ContentAssetExposure {
+  id: string
+  asset_id: string
+  token: string
+  public_url: string
+  exposed_at: string
+  expires_at: string
+  cleaned_up_at: string | null
+  status: ContentAssetExposureStatus
+  note: string | null
+  content_task_id: string | null
+  created_at: string
+}

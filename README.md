@@ -57,6 +57,51 @@ By default it starts `openclaw tui`. To launch a different OpenClaw command, eit
 
 or set `LUPE_OPENCLAW_COMMAND` in `lupe.env`.
 
+## Content Asset Bridge
+
+The dashboard can register image assets that already live in Lupe's shared folder, expose one asset at a temporary public URL for Instagram publishing, and revoke/expire that public exposure after publish succeeds. Source files stay private on disk and are never deleted by cleanup.
+
+Configure the dashboard instance that can read the shared folder:
+
+```bash
+CONTENT_ASSET_BASE_DIRS=/Users/lupe/Library/CloudStorage/GoogleDrive-lupe@herzenco.co
+CONTENT_ASSET_PUBLIC_BASE_URL=https://your-dashboard-public-url.example
+DASHBOARD_API_KEY=...
+```
+
+`CONTENT_ASSET_PUBLIC_BASE_URL` must be reachable by Instagram's servers and must point to the dashboard server that can read `CONTENT_ASSET_BASE_DIRS`. If a deployed dashboard cannot access Lupe's local disk, run the dashboard on Lupe's machine behind a public tunnel or another reachable host with the shared folder mounted.
+
+Run `migrations/010_content_asset_bridge.sql` in Supabase before using the bridge.
+
+Lupe script examples:
+
+```bash
+export DASHBOARD_URL="http://localhost:3000"
+export DASHBOARD_KEY="paste-dashboard-api-key"
+export ASSET_PATH="/Users/lupe/Library/CloudStorage/GoogleDrive-lupe@herzenco.co/Content/post.jpg"
+
+curl -sS -X POST "$DASHBOARD_URL/api/content-assets" \
+  -H "Authorization: Bearer $DASHBOARD_KEY" \
+  -H "Content-Type: application/json" \
+  --data "{\"path\":\"$ASSET_PATH\",\"tags\":[\"instagram\"],\"metadata\":{\"campaign\":\"xyren\"}}"
+
+curl -sS "$DASHBOARD_URL/api/content-assets" \
+  -H "Authorization: Bearer $DASHBOARD_KEY"
+
+curl -sS -X POST "$DASHBOARD_URL/api/content-assets/$ASSET_ID/expose" \
+  -H "Authorization: Bearer $DASHBOARD_KEY" \
+  -H "Content-Type: application/json" \
+  --data '{"ttl_seconds":3600,"note":"Instagram publish window","content_task_id":"xyren-approval-123"}'
+
+curl -sS -X POST "$DASHBOARD_URL/api/content-assets/$ASSET_ID/revoke" \
+  -H "Authorization: Bearer $DASHBOARD_KEY"
+
+curl -sS -X POST "$DASHBOARD_URL/api/content-assets/cleanup" \
+  -H "Authorization: Bearer $DASHBOARD_KEY"
+```
+
+The returned exposure includes `public_url`, which is the value to hand to Instagram. The unauthenticated public media route is `/public/content-assets/:token`; all registration, listing, expose, revoke, and cleanup routes remain protected by the dashboard API key or dashboard session.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

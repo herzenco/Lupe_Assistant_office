@@ -4,6 +4,8 @@
 
 The dashboard now tracks work reports instead of time spent per project.
 
+The dashboard also includes a Content Asset Bridge for Lupe's content approval and Instagram publishing workflow. It registers image assets from an approved shared Lupe folder, creates temporary tokenized public URLs for selected assets, and revokes/expires those public exposures without deleting the source files.
+
 The main dashboard shows five visible daily report streams:
 
 - `lupe_tasks` - what Lupe worked on throughout the day
@@ -23,11 +25,13 @@ Run these Supabase migrations before deploying the new dashboard:
 1. `migrations/007_login_attempts.sql`
 2. `migrations/008_work_reports.sql`
 3. `migrations/009_investment_work_reports.sql`
+4. `migrations/010_content_asset_bridge.sql`
 
 The migrations add:
 
 - `login_attempts` for durable dashboard login rate limiting
 - `work_reports` for Lupe/Codex/Claude/investment/file-intake activity reports
+- `content_assets` and `content_asset_exposures` for local asset registration, temporary public media URLs, and exposure audit cleanup
 
 Required dashboard environment variables:
 
@@ -39,7 +43,65 @@ LOGIN_PIN=...
 DASHBOARD_API_KEY=...
 MONTHLY_BUDGET_USD=150
 LUPE_HEALTH_MACHINE_ID=lupe-main-machine
+CONTENT_ASSET_BASE_DIRS=/path/to/shared/lupe/folder
+CONTENT_ASSET_PUBLIC_BASE_URL=https://public-dashboard-or-tunnel.example
 ```
+
+`CONTENT_ASSET_PUBLIC_BASE_URL` must be reachable by Instagram and must point at a dashboard instance that can read the paths under `CONTENT_ASSET_BASE_DIRS`.
+
+## Content Asset Bridge API
+
+Lupe scripts should register source files that already exist in the shared folder:
+
+```http
+POST /api/content-assets
+Authorization: Bearer $DASHBOARD_API_KEY
+Content-Type: application/json
+```
+
+```json
+{
+  "path": "/path/to/shared/lupe/folder/Content/post.jpg",
+  "tags": ["instagram"],
+  "metadata": {
+    "campaign": "xyren"
+  }
+}
+```
+
+The response returns `{ "ok": true, "asset": { ... } }`. Use `asset.id` to expose the asset:
+
+```http
+POST /api/content-assets/:id/expose
+Authorization: Bearer $DASHBOARD_API_KEY
+Content-Type: application/json
+```
+
+```json
+{
+  "ttl_seconds": 3600,
+  "note": "Instagram publish window",
+  "content_task_id": "approval-123"
+}
+```
+
+The response returns `exposure.public_url`. That URL uses `/public/content-assets/:token`, is unauthenticated, and works only while the exposure is active and unexpired.
+
+After Instagram publish succeeds, Lupe should immediately revoke the exposure:
+
+```http
+POST /api/content-assets/:id/revoke
+Authorization: Bearer $DASHBOARD_API_KEY
+```
+
+Run cleanup from a scheduled job or ad hoc script:
+
+```http
+POST /api/content-assets/cleanup
+Authorization: Bearer $DASHBOARD_API_KEY
+```
+
+Inspection/debugging UI is available at `/content-assets`.
 
 ## Report API
 
@@ -198,6 +260,17 @@ Watch/read the Investment folder and report new or changed files, latest trades,
 
 Source: `investments`
 
+The dashboard Investments panel reads directly from `details.trades` and `details.positions`. Do not send a connectivity-only or auth-check report as the final dashboard report. Every scheduled investment run should include:
+
+- `details.positions` as an array of current open positions
+- `details.trades` as an array of new executed trades since the prior Desktop report
+- If there are no new trades, include the latest visible same-day executed trades/fills and set `new_trade_count` to `0`
+- `details.open_orders` and `details.stops` when broker stops or open orders are visible
+- `details.account` with cash, buying power, equity/portfolio value, and capture time when available
+- `details.report_path` pointing to the canonical Desktop Markdown report
+
+For local testing, set `LUPE_DASHBOARD_URL=http://localhost:3000` so Codex automations post to the dashboard being viewed locally. For production, set `LUPE_DASHBOARD_URL` to the deployed dashboard URL. In both cases, `DASHBOARD_API_KEY` must match the dashboard environment.
+
 Recommended details:
 
 ```json
@@ -228,11 +301,34 @@ Recommended details:
       "ticker": "AAPL",
       "shares": 5,
       "average_cost": 210.25,
+      "market_value": 1051.25,
+      "unrealized_pnl": 0,
       "status": "Open starter position"
     }
   ],
+  "open_orders": [
+    {
+      "ticker": "AAPL",
+      "side": "sell",
+      "type": "stop-market",
+      "quantity": 5,
+      "stop_price": 199.5,
+      "state": "confirmed",
+      "time_in_force": "gtc",
+      "created_at": "2026-06-23T14:35:00.000Z"
+    }
+  ],
+  "account": {
+    "cash": 500,
+    "buying_power": 500,
+    "portfolio_value": 1551.25,
+    "captured_at": "2026-06-23T14:35:00.000Z"
+  },
+  "report_path": "/Users/herzen/Desktop/Lupe/Codex Work/Investment/investment_2026-06-23.md",
+  "source_agent": "codex",
   "added": 1,
-  "changed": 0
+  "changed": 0,
+  "new_trade_count": 1
 }
 ```
 
